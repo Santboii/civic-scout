@@ -13,22 +13,22 @@ const SEVERITY_CONFIG = {
   red: {
     icon: AlertTriangle,
     color: 'var(--status-red)',
-    bg: 'rgba(240, 100, 73, 0.08)',
-    border: 'rgba(240, 100, 73, 0.2)',
+    bg: 'rgba(217, 79, 59, 0.06)',
+    border: 'rgba(217, 79, 59, 0.15)',
     label: 'High Impact',
   },
   yellow: {
     icon: AlertCircle,
     color: 'var(--status-yellow)',
-    bg: 'rgba(234, 188, 58, 0.08)',
-    border: 'rgba(234, 188, 58, 0.2)',
+    bg: 'rgba(201, 154, 29, 0.06)',
+    border: 'rgba(201, 154, 29, 0.15)',
     label: 'Medium Impact',
   },
   green: {
     icon: CheckCircle,
     color: 'var(--status-green)',
-    bg: 'rgba(52, 211, 153, 0.08)',
-    border: 'rgba(52, 211, 153, 0.2)',
+    bg: 'rgba(27, 155, 108, 0.06)',
+    border: 'rgba(27, 155, 108, 0.15)',
     label: 'Standard',
   },
 }
@@ -59,14 +59,6 @@ export default function PermitList({ permits }: PermitListProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4 px-1">
-        <h3
-          className="text-[10px] font-semibold uppercase tracking-[0.2em]"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          Results ({permits.length})
-        </h3>
-      </div>
       <ul className="space-y-3">
         {sorted.map((permit, index) => {
           const config = SEVERITY_CONFIG[permit.severity]
@@ -80,8 +72,8 @@ export default function PermitList({ permits }: PermitListProps) {
               }}
               onClick={() => setSelectedPermit(permit)}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(13, 200, 180, 0.25)'
-                e.currentTarget.style.boxShadow = '0 0 16px rgba(13, 200, 180, 0.08)'
+                e.currentTarget.style.borderColor = 'rgba(10, 158, 142, 0.3)'
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.08)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = ''
@@ -113,9 +105,9 @@ export default function PermitList({ permits }: PermitListProps) {
                       <span
                         className="text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
                         style={{
-                          backgroundColor: 'rgba(232, 168, 50, 0.1)',
+                          backgroundColor: 'rgba(200, 136, 10, 0.08)',
                           color: 'var(--accent-warm)',
-                          border: '1px solid rgba(232, 168, 50, 0.2)',
+                          border: '1px solid rgba(200, 136, 10, 0.15)',
                         }}
                       >
                         ${(permit.reported_cost / 1e6).toFixed(1)}M

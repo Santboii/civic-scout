@@ -11,17 +11,17 @@ interface MapProps {
 }
 
 // NOTE(Agent): Hex values required for inline HTML Leaflet markers/popups
-// where CSS custom properties cannot be resolved. Updated for dark theme visibility.
+// where CSS custom properties cannot be resolved. Updated for light theme.
 const SEVERITY_COLORS: Record<string, string> = {
-  red: '#F06449',
-  yellow: '#EABC3A',
-  green: '#34D399',
+  red: '#D94F3B',
+  yellow: '#C99A1D',
+  green: '#1B9B6C',
 }
 
-const ACCENT_TEAL = '#0DC8B4'
-const TEXT_PRIMARY = '#E8ECF1'
-const TEXT_SECONDARY = '#7A8BA4'
-const TEXT_MUTED = '#4A5568'
+const ACCENT_TEAL = '#0A9E8E'
+const TEXT_PRIMARY = '#1A1D26'
+const TEXT_SECONDARY = '#5C6370'
+const TEXT_MUTED = '#9CA3AF'
 
 export default function Map({ permits, center }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
@@ -47,8 +47,8 @@ export default function Map({ permits, center }: MapProps) {
 
     L.control.zoom({ position: 'topright' }).addTo(mapRef.current)
 
-    // NOTE(Agent): CartoDB Dark Matter tiles for dark theme cohesion. Free, no API key.
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // NOTE(Agent): CartoDB Voyager tiles — clean colored map with blue water, green parks. Free, no API key.
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
       subdomains: 'abcd',
       maxZoom: 20,
@@ -76,8 +76,8 @@ export default function Map({ permits, center }: MapProps) {
       className: '',
       html: `
         <div style="position:relative">
-          <div style="position:absolute;inset:-4px;border-radius:50%;background:rgba(13,200,180,0.25);animation:pulse 2s ease-in-out infinite"></div>
-          <div style="width:14px;height:14px;border-radius:50%;border:2px solid ${ACCENT_TEAL};background:${ACCENT_TEAL};box-shadow:0 0 12px rgba(13,200,180,0.5);display:flex;align-items:center;justify-content:center">
+          <div style="position:absolute;inset:-4px;border-radius:50%;background:rgba(10,158,142,0.2);animation:pulse 2s ease-in-out infinite"></div>
+          <div style="width:14px;height:14px;border-radius:50%;border:2px solid ${ACCENT_TEAL};background:${ACCENT_TEAL};box-shadow:0 0 12px rgba(10,158,142,0.35);display:flex;align-items:center;justify-content:center">
             <div style="width:4px;height:4px;border-radius:50%;background:white"></div>
           </div>
         </div>
@@ -102,10 +102,10 @@ export default function Map({ permits, center }: MapProps) {
 
     // Permit markers
     permits.forEach((permit) => {
-      const color = SEVERITY_COLORS[permit.severity] ?? '#7A8BA4'
+      const color = SEVERITY_COLORS[permit.severity] ?? '#9CA3AF'
       const permitIcon = L.divIcon({
         className: '',
-        html: `<div style="width:10px;height:10px;border-radius:50%;border:2px solid rgba(12,17,23,0.6);background:${color};box-shadow:0 0 8px ${color}44;cursor:pointer;transition:transform 0.15s"></div>`,
+        html: `<div style="width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,0.8);background:${color};box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:pointer;transition:transform 0.15s"></div>`,
         iconSize: [10, 10],
         iconAnchor: [5, 5],
       })
@@ -117,11 +117,11 @@ export default function Map({ permits, center }: MapProps) {
           <p style="font-size:12px;line-height:1.5;margin:0 0 10px;color:${TEXT_SECONDARY}">
             ${permit.community_note?.slice(0, 100) ?? ''}${(permit.community_note?.length ?? 0) > 100 ? '…' : ''}
           </p>
-          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(0,0,0,0.06);padding-top:8px">
             <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:${color}">
               ${permit.severity}
             </span>
-            ${permit.reported_cost ? `<span style="font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(232,168,50,0.12);color:#E8A832;border:1px solid rgba(232,168,50,0.2)">$${(permit.reported_cost / 1e6).toFixed(1)}M</span>` : ''}
+            ${permit.reported_cost ? `<span style="font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(200,136,10,0.08);color:#C8880A;border:1px solid rgba(200,136,10,0.15)">$${(permit.reported_cost / 1e6).toFixed(1)}M</span>` : ''}
           </div>
         </div>
       `
@@ -138,7 +138,7 @@ export default function Map({ permits, center }: MapProps) {
     <div className="w-full h-full relative z-0 min-h-[400px]" style={{ backgroundColor: 'var(--background-primary)' }}>
       <div ref={mapContainer} className="w-full h-full" style={{ height: '100%', width: '100%' }} />
 
-      {/* Map Legend — Dark glass */}
+      {/* Map Legend — Light glass */}
       <div className="glass absolute bottom-6 right-6 z-10 p-4 rounded-xl hidden sm:block">
         <p className="text-[9px] font-semibold uppercase tracking-[0.25em] mb-3" style={{ color: 'var(--text-muted)' }}>
           Legend
@@ -146,7 +146,7 @@ export default function Map({ permits, center }: MapProps) {
         <div className="space-y-2.5">
           {(['red', 'yellow', 'green'] as const).map((severity) => (
             <div key={severity} className="flex items-center gap-2.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[severity], boxShadow: `0 0 6px ${SEVERITY_COLORS[severity]}44` }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[severity], boxShadow: `0 1px 4px ${SEVERITY_COLORS[severity]}33` }} />
               <span className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
                 {severity === 'red' ? 'High Impact' : severity === 'yellow' ? 'Medium Impact' : 'Standard'}
               </span>
@@ -154,7 +154,7 @@ export default function Map({ permits, center }: MapProps) {
           ))}
           <div className="pt-2 border-t mt-2" style={{ borderColor: 'var(--border-glass)' }}>
             <div className="flex items-center gap-2.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ACCENT_TEAL, boxShadow: `0 0 8px ${ACCENT_TEAL}66` }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ACCENT_TEAL, boxShadow: `0 1px 4px ${ACCENT_TEAL}44` }} />
               <span className="text-[11px] font-medium" style={{ color: ACCENT_TEAL }}>Search Center</span>
             </div>
           </div>

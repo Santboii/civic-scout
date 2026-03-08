@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams, useRouter } from 'next/navigation'
 import SearchForm from '@/components/SearchForm'
 import PermitList from '@/components/PermitList'
+import SeverityFilter from '@/components/SeverityFilter'
 import PaymentModal from '@/components/PaymentModal'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
+import type { PermitSeverity } from '@/lib/permit-classifier'
 
 // Leaflet requires browser APIs — load client-side only
 const Map = dynamic(() => import('@/components/Map'), { ssr: false })
@@ -26,6 +28,20 @@ function HomeContent() {
   const [token, setToken] = useState<string | null>(null)
   const [showPayment, setShowPayment] = useState(false)
   const [dataSource, setDataSource] = useState<string>('')
+  const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
+
+  // NOTE(Agent): Severity order used for filtering — 'green' shows all,
+  // 'yellow' shows yellow+red, 'red' shows only red.
+  const SEVERITY_ORDER: Record<PermitSeverity, number> = useMemo(() => ({
+    green: 0,
+    yellow: 1,
+    red: 2,
+  }), [])
+
+  const filteredPermits = useMemo(() => {
+    const threshold = SEVERITY_ORDER[minSeverity]
+    return permits.filter((p) => SEVERITY_ORDER[p.severity] >= threshold)
+  }, [permits, minSeverity, SEVERITY_ORDER])
 
   // NOTE(Agent): useRef guards prevent infinite re-render loops. useSearchParams() returns
   // a new object reference on every render in Next.js 16, so using it as a useEffect
@@ -169,7 +185,7 @@ function HomeContent() {
               style={{
                 backgroundColor: 'var(--accent-glow)',
                 color: 'var(--accent-primary)',
-                border: '1px solid rgba(13, 200, 180, 0.15)',
+                border: '1px solid rgba(10, 158, 142, 0.15)',
                 fontFamily: 'var(--font-body)',
               }}
             >
@@ -186,11 +202,11 @@ function HomeContent() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
         <div className="flex-1 min-h-[50vh] lg:min-h-0 relative">
-          <Map permits={permits} center={mapCenter} />
+          <Map permits={filteredPermits} center={mapCenter} />
           {loading && (
             <div
               className="absolute inset-0 flex items-center justify-center z-20"
-              style={{ backgroundColor: 'rgba(12, 17, 23, 0.6)', backdropFilter: 'blur(4px)' }}
+              style={{ backgroundColor: 'rgba(250, 250, 247, 0.7)', backdropFilter: 'blur(4px)' }}
             >
               <div className="flex flex-col items-center gap-3">
                 <div
@@ -198,7 +214,7 @@ function HomeContent() {
                   style={{
                     borderColor: 'var(--accent-primary)',
                     borderTopColor: 'transparent',
-                    boxShadow: '0 0 16px rgba(13, 200, 180, 0.3)',
+                    boxShadow: '0 0 16px rgba(10, 158, 142, 0.2)',
                   }}
                 ></div>
                 <span
@@ -221,23 +237,37 @@ function HomeContent() {
             }}
           >
             {search && (
-              <div className="mb-6">
-                <h2
-                  className="text-[10px] font-semibold uppercase tracking-[0.2em] mb-1"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Current Search
-                </h2>
+              <div
+                className="mb-4 pb-4 border-b"
+                style={{ borderBottomColor: 'var(--border-glass)' }}
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <span
+                    className="text-[9px] font-semibold uppercase tracking-[0.2em]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Searching near
+                  </span>
+                  {permits.length > 0 && (
+                    <span
+                      className="text-[9px] font-semibold uppercase tracking-[0.15em]"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {permits.length} results
+                    </span>
+                  )}
+                </div>
                 <p
-                  className="text-sm font-semibold truncate"
-                  style={{ color: 'var(--text-primary)' }}
+                  className="text-[13px] font-medium truncate leading-snug"
+                  style={{ color: 'var(--text-primary)', marginBottom: 0 }}
+                  title={search.address}
                 >
                   {search.address}
                 </p>
                 {dataSource === 'stale' && (
                   <p
-                    className="text-[10px] font-semibold mt-2 flex items-center gap-1.5"
-                    style={{ color: 'var(--status-yellow)' }}
+                    className="text-[10px] font-semibold mt-1.5 flex items-center gap-1.5"
+                    style={{ color: 'var(--status-yellow)', marginBottom: 0 }}
                   >
                     <span
                       className="w-1.5 h-1.5 rounded-full inline-block"
@@ -249,7 +279,19 @@ function HomeContent() {
               </div>
             )}
 
-            <PermitList permits={permits} />
+            {permits.length > 0 && (
+              <SeverityFilter
+                value={minSeverity}
+                onChange={setMinSeverity}
+                counts={{
+                  green: permits.filter((p) => p.severity === 'green').length,
+                  yellow: permits.filter((p) => p.severity === 'yellow').length,
+                  red: permits.filter((p) => p.severity === 'red').length,
+                }}
+              />
+            )}
+
+            <PermitList permits={filteredPermits} />
 
             {/* Data Attribution Footer */}
             <div className="mt-12 pt-8 border-t" style={{ borderTopColor: 'var(--border-strong)' }}>
@@ -266,7 +308,7 @@ function HomeContent() {
                   rel="noopener noreferrer"
                   className="flex items-start gap-3 group rounded-lg p-2.5 -mx-2.5 transition-colors"
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--accent-glow)'
+                    e.currentTarget.style.backgroundColor = 'rgba(10, 158, 142, 0.06)'
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = 'transparent'
@@ -275,7 +317,7 @@ function HomeContent() {
                   <div
                     className="p-1.5 rounded-md"
                     style={{
-                      backgroundColor: 'rgba(13, 200, 180, 0.08)',
+                      backgroundColor: 'rgba(10, 158, 142, 0.06)',
                       border: '1px solid var(--border-glass)',
                     }}
                   >
@@ -299,7 +341,7 @@ function HomeContent() {
                   rel="noopener noreferrer"
                   className="flex items-start gap-3 group rounded-lg p-2.5 -mx-2.5 transition-colors"
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(52, 211, 153, 0.06)'
+                    e.currentTarget.style.backgroundColor = 'rgba(27, 155, 108, 0.06)'
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = 'transparent'
@@ -308,7 +350,7 @@ function HomeContent() {
                   <div
                     className="p-1.5 rounded-md"
                     style={{
-                      backgroundColor: 'rgba(52, 211, 153, 0.08)',
+                      backgroundColor: 'rgba(27, 155, 108, 0.06)',
                       border: '1px solid var(--border-glass)',
                     }}
                   >

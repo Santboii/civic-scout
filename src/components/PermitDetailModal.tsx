@@ -12,20 +12,20 @@ interface PermitDetailModalProps {
 const SEVERITY_CONFIG = {
   red: {
     color: 'var(--status-red)',
-    bg: 'rgba(240, 100, 73, 0.08)',
-    border: 'rgba(240, 100, 73, 0.15)',
+    bg: 'rgba(217, 79, 59, 0.06)',
+    border: 'rgba(217, 79, 59, 0.12)',
     label: 'High Impact Development',
   },
   yellow: {
     color: 'var(--status-yellow)',
-    bg: 'rgba(234, 188, 58, 0.08)',
-    border: 'rgba(234, 188, 58, 0.15)',
+    bg: 'rgba(201, 154, 29, 0.06)',
+    border: 'rgba(201, 154, 29, 0.12)',
     label: 'Medium Impact Development',
   },
   green: {
     color: 'var(--status-green)',
-    bg: 'rgba(52, 211, 153, 0.08)',
-    border: 'rgba(52, 211, 153, 0.15)',
+    bg: 'rgba(27, 155, 108, 0.06)',
+    border: 'rgba(27, 155, 108, 0.12)',
     label: 'Standard Development',
   },
 }
@@ -71,7 +71,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
               style={{
                 color: config.color,
                 borderColor: config.color,
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                backgroundColor: 'rgba(0, 0, 0, 0.06)',
               }}
             >
               {permit.severity}
@@ -85,7 +85,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/5 rounded-full transition-colors"
+            className="p-2 hover:bg-black/5 rounded-full transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
             <X size={20} />
@@ -115,7 +115,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
                   <span
                     className="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                     style={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.03)',
                       color: 'var(--text-secondary)',
                       border: '1px solid var(--border-glass)',
                     }}
@@ -192,7 +192,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
           >
             <div
               className="p-2 rounded-lg shrink-0"
-              style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }}
+              style={{ backgroundColor: 'rgba(0, 0, 0, 0.03)' }}
             >
               <MessageCircle size={20} style={{ color: config.color }} />
             </div>
@@ -232,7 +232,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
                 <div
                   className="rounded-xl p-4 text-sm border"
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
                     borderColor: 'var(--border-glass)',
                   }}
                 >
@@ -281,16 +281,16 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
             className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
             style={{
               backgroundColor: 'var(--accent-primary)',
-              color: 'var(--background-primary)',
-              boxShadow: '0 4px 16px rgba(13, 200, 180, 0.25)',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 16px rgba(10, 158, 142, 0.2)',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = 'var(--accent-primary-hover)'
-              e.currentTarget.style.boxShadow = '0 4px 24px rgba(13, 200, 180, 0.4)'
+              e.currentTarget.style.boxShadow = '0 4px 24px rgba(10, 158, 142, 0.3)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
-              e.currentTarget.style.boxShadow = '0 4px 16px rgba(13, 200, 180, 0.25)'
+              e.currentTarget.style.boxShadow = '0 4px 16px rgba(10, 158, 142, 0.2)'
             }}
           >
             View Full Data Source

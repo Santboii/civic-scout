@@ -88,7 +88,7 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
               onClick={handleLookup}
               disabled={!!loading}
               className="w-full flex items-center justify-between rounded-xl px-5 py-4 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60"
-              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-strong)' }}
+              style={{ backgroundColor: 'rgba(0,0,0,0.02)', border: '1px solid var(--border-strong)' }}
             >
               <div className="text-left">
                 <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>Single Look-Up</p>
@@ -103,7 +103,7 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
             <button
               onClick={() => setView('subscribe')}
               className="w-full flex items-center justify-between rounded-xl px-5 py-5 transition-all hover:scale-[1.01] active:scale-[0.99]"
-              style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--background-primary)', boxShadow: '0 4px 20px rgba(13,200,180,0.3)' }}
+              style={{ backgroundColor: 'var(--accent-primary)', color: '#FFFFFF', boxShadow: '0 4px 20px rgba(10,158,142,0.2)' }}
             >
               <div className="text-left">
                 <p className="font-bold text-sm">Unlimited Plan</p>
@@ -130,13 +130,13 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl px-4 py-3.5 text-sm font-medium outline-none transition-all"
-              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
+              style={{ backgroundColor: 'rgba(0,0,0,0.02)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)' }}
             />
             <button
               onClick={handleSubscription}
               disabled={!email || !!loading}
               className="w-full rounded-xl py-4 text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-              style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--background-primary)', boxShadow: '0 4px 20px rgba(13,200,180,0.3)' }}
+              style={{ backgroundColor: 'var(--accent-primary)', color: '#FFFFFF', boxShadow: '0 4px 20px rgba(10,158,142,0.2)' }}
             >
               {loading === 'subscription' ? <Loader2 size={18} className="animate-spin" /> : null}
               Subscribe for $5/month

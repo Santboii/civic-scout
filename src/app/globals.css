@@ -1,42 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  /* === Civic Editorial — Dark Ink Palette === */
+  /* === Civic Editorial — Warm Broadsheet Palette === */
+  /* NOTE(Agent): Light editorial theme inspired by premium publications.
+     Warm off-white paper tones, deep navy text, teal/amber accents.
+     CartoDB Positron tiles for the light map. */
 
-  /* Surfaces */
-  --background-primary: #0C1117;
-  --background-secondary: rgba(19, 26, 36, 0.85);
-  --background-elevated: rgba(26, 35, 50, 0.9);
-  --background-card: #131A24;
-  --backdrop-overlay: rgba(0, 0, 0, 0.7);
+  /* Surfaces — warm paper, not clinical white */
+  --background-primary: #FAFAF7;
+  --background-secondary: rgba(255, 255, 255, 0.8);
+  --background-elevated: rgba(245, 244, 240, 0.95);
+  --background-card: #FFFFFF;
+  --backdrop-overlay: rgba(26, 29, 38, 0.5);
 
   /* Legacy aliases (used by Tailwind @theme) */
-  --background: #0C1117;
-  --foreground: #E8ECF1;
+  --background: #FAFAF7;
+  --foreground: #1A1D26;
 
-  /* Borders */
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.08);
-  --border-accent: rgba(13, 200, 180, 0.2);
+  /* Borders — warm neutrals */
+  --border-glass: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.1);
+  --border-accent: rgba(10, 158, 142, 0.2);
 
-  /* Typography */
-  --text-primary: #E8ECF1;
-  --text-secondary: #7A8BA4;
-  --text-muted: #4A5568;
+  /* Typography — deep navy to warm gray */
+  --text-primary: #1A1D26;
+  --text-secondary: #5C6370;
+  --text-muted: #9CA3AF;
 
-  /* Accent Colors */
-  --accent-primary: #0DC8B4;
-  --accent-primary-hover: #0AFEDC;
-  --accent-glow: rgba(13, 200, 180, 0.12);
-  --accent-glow-strong: rgba(13, 200, 180, 0.25);
-  --accent-warm: #E8A832;
-  --accent-secondary: #7A8BA4;
+  /* Accent Colors — slightly deeper for WCAG on light */
+  --accent-primary: #0A9E8E;
+  --accent-primary-hover: #088577;
+  --accent-glow: rgba(10, 158, 142, 0.08);
+  --accent-glow-strong: rgba(10, 158, 142, 0.15);
+  --accent-warm: #C8880A;
+  --accent-secondary: #5C6370;
 
-  /* Status Colors — vivid on dark */
-  --status-red: #F06449;
-  --status-yellow: #EABC3A;
-  --status-green: #34D399;
-  --status-indigo: #6CB4CC;
+  /* Status Colors — rich tones for light bg readability */
+  --status-red: #D94F3B;
+  --status-yellow: #C99A1D;
+  --status-green: #1B9B6C;
+  --status-indigo: #4A90B0;
 
   /* Spacing Scale (8px base) */
   --space-1: 4px;
@@ -54,11 +57,11 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadows — soft glow on dark */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(13, 200, 180, 0.15);
+  /* Shadows — gentle, warm */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 20px rgba(10, 158, 142, 0.12);
 }
 
 @theme inline {
@@ -71,18 +74,17 @@
   --color-text-secondary: var(--text-secondary);
 }
 
-/* === Subtle Grain Texture === */
-/* NOTE(Agent): Using an SVG filter for film grain rather than an image.
-   This avoids an extra network request while adding depth to the dark surfaces. */
+/* === Subtle Paper Texture === */
+/* NOTE(Agent): Very faint grain for warmth and depth on paper-white surfaces. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
-  opacity: 0.4;
+  opacity: 0.3;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(13, 200, 180, 0.03) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 75%, rgba(108, 180, 204, 0.03) 0%, transparent 55%);
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(10, 158, 142, 0.02) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 75%, rgba(200, 136, 10, 0.02) 0%, transparent 55%);
   pointer-events: none;
 }
 
@@ -91,7 +93,7 @@ body::after {
   position: fixed;
   inset: 0;
   z-index: -1;
-  opacity: 0.035;
+  opacity: 0.018;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
@@ -106,7 +108,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   color: var(--text-primary);
   font-family: var(--font-display), Georgia, serif;
   font-weight: 700;
@@ -114,9 +121,17 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-h1 { font-size: 2.5rem; }
-h2 { font-size: 2rem; }
-h3 { font-size: 1.5rem; }
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
 
 p {
   color: var(--text-secondary);
@@ -134,21 +149,21 @@ button:disabled {
   opacity: 0.5;
 }
 
-/* === Glass Utilities — Dark variant === */
+/* === Glass Utilities — Light frosted variant === */
 
 /* NOTE(Agent): Apply .glass only to surfaces that benefit from blur:
    header, sidebar container, modals, map legend. Max ~5 surfaces
    to avoid GPU compositing overhead during scrolling. */
 .glass {
   background: var(--background-secondary);
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
   border: 1px solid var(--border-glass);
   box-shadow: var(--shadow-glass);
 }
 
 /* NOTE(Agent): Use .glass-elevated for scrollable children like
-   permit cards. No backdrop-filter — solid rgba to avoid jank. */
+   permit cards. No backdrop-filter — solid bg to avoid jank. */
 .glass-elevated {
   background: var(--background-card);
   border: 1px solid var(--border-strong);
@@ -162,6 +177,7 @@ button:disabled {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -169,24 +185,36 @@ button:disabled {
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 8px rgba(13, 200, 180, 0.2); }
-  50% { box-shadow: 0 0 20px rgba(13, 200, 180, 0.4); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(10, 158, 142, 0.15);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(10, 158, 142, 0.3);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 .animate-fade-slide-up {
   animation: fadeSlideUp 0.4s ease-out both;
 }
 
-/* === Leaflet Popup Dark Glass Override === */
+/* === Leaflet Popup — Light glass === */
 .leaflet-popup-content-wrapper {
-  background: rgba(19, 26, 36, 0.92) !important;
-  backdrop-filter: blur(16px) saturate(1.3) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.3) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(16px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2) !important;
   border: 1px solid var(--border-strong) !important;
   box-shadow: var(--shadow-glass) !important;
   border-radius: var(--radius-lg) !important;
@@ -194,10 +222,10 @@ button:disabled {
 }
 
 .leaflet-popup-tip {
-  background: rgba(19, 26, 36, 0.92) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
 }
 
-/* === Scrollbar styling for dark theme === */
+/* === Scrollbar styling — warm gray === */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -207,16 +235,16 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* === Selection color === */
 ::selection {
-  background: rgba(13, 200, 180, 0.3);
+  background: rgba(10, 158, 142, 0.2);
   color: var(--text-primary);
 }
