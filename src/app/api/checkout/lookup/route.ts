@@ -11,7 +11,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'lat and lon required' }, { status: 400 })
   }
 
-  const addressKey = permitCacheKey(lat, lon)
+  // NOTE(Agent): For single-address lookups, we use 'general' as the domain
+  // since the city isn't resolved at checkout time. The actual permit fetch
+  // will resolve the city from coordinates at query time.
+  const addressKey = permitCacheKey(lat, lon, 'general')
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
   const session = await stripe.checkout.sessions.create({

@@ -65,7 +65,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
         <input
           type="text"
           className="flex-1 outline-none text-sm font-medium bg-transparent placeholder:text-[var(--text-muted)]"
-          placeholder="Search a Chicago address…"
+          placeholder="Search any US address…"
           style={{
             color: 'var(--text-primary)',
           }}

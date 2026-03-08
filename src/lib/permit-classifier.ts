@@ -126,6 +126,19 @@ export function classifyPermit(permit: {
   } else if (isNewConstruction && cost >= MEDIUM_COST_THRESHOLD) {
     severity = 'yellow'
     reason = `New construction $${(MEDIUM_COST_THRESHOLD / 1e6).toFixed(0)}M–$${(HIGH_COST_THRESHOLD / 1e6).toFixed(0)}M`
+  } else if (!isNewConstruction && hasHighImpactKeyword) {
+    // NOTE(Agent): Cost-only fallback for non-Chicago cities whose permit_type
+    // strings don't match known patterns. When high-impact keywords are present
+    // in the description, classify as red regardless of permit_type.
+    severity = 'red'
+    reason = 'High-impact use detected in description'
+  } else if (!isNewConstruction && cost >= HIGH_COST_THRESHOLD) {
+    // NOTE(Agent): Cost-only fallback — large project without recognized permit type
+    severity = 'red'
+    reason = `High-cost project ≥$${(HIGH_COST_THRESHOLD / 1e6).toFixed(0)}M`
+  } else if (!isNewConstruction && cost >= MEDIUM_COST_THRESHOLD) {
+    severity = 'yellow'
+    reason = `Mid-cost project $${(MEDIUM_COST_THRESHOLD / 1e6).toFixed(0)}M–$${(HIGH_COST_THRESHOLD / 1e6).toFixed(0)}M`
   } else {
     severity = 'green'
     reason = 'Standard permit'

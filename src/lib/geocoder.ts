@@ -1,17 +1,22 @@
-// Chicago bounding box
-const CHICAGO_BOUNDS = {
-  latMin: 41.644,
-  latMax: 42.023,
-  lonMin: -87.940,
-  lonMax: -87.524,
-}
+import type { BoundingBox } from './city-registry'
 
-export function isWithinChicago(lat: number, lon: number): boolean {
+/**
+ * Generic bounding-box containment check.
+ *
+ * NOTE(Agent): This replaces the old `isWithinChicago` function.
+ * Previously hardcoded to Chicago's bbox, now accepts any arbitrary
+ * bounding box for multi-city support.
+ */
+export function isWithinBounds(
+  lat: number,
+  lon: number,
+  bbox: BoundingBox
+): boolean {
   return (
-    lat >= CHICAGO_BOUNDS.latMin &&
-    lat <= CHICAGO_BOUNDS.latMax &&
-    lon >= CHICAGO_BOUNDS.lonMin &&
-    lon <= CHICAGO_BOUNDS.lonMax
+    lat >= bbox.latMin &&
+    lat <= bbox.latMax &&
+    lon >= bbox.lonMin &&
+    lon <= bbox.lonMax
   )
 }
 

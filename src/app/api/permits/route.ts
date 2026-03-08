@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { redis, permitCacheKey, permitStaleCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
-import { fetchPermitsNearby, RawPermit } from '@/lib/socrata'
+import { fetchPermitsNearby, NormalizedRawPermit } from '@/lib/socrata'
 import { enrichWithCookCounty } from '@/lib/cook-county'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { verifyToken, extractToken } from '@/lib/auth'
-import { isWithinChicago } from '@/lib/geocoder'
+import { findCityByCoords } from '@/lib/city-registry'
 import { createServiceClient } from '@/lib/supabase'
 
 export const runtime = 'edge'
@@ -18,8 +18,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'lat and lon are required' }, { status: 400 })
   }
 
-  if (!isWithinChicago(lat, lon)) {
-    return NextResponse.json({ error: 'Location is outside Chicago' }, { status: 400 })
+  // Resolve city from coordinates using the registry
+  const registry = await findCityByCoords(lat, lon)
+  if (!registry) {
+    return NextResponse.json(
+      { error: 'No permit data available for this area yet', supported: false },
+      { status: 422 }
+    )
   }
 
   // Verify access
@@ -30,7 +35,6 @@ export async function GET(request: NextRequest) {
 
   // NOTE(Agent): In development, allow the hardcoded 'dev-token' to bypass JWT verification.
   // The PaymentModal dev bypass sets ds_session=dev-token (a plain string, not a JWT).
-  // A previous proxy.ts intended to handle this but was never wired as middleware.
   // In production builds, NODE_ENV is always 'production', so this branch is dead-code eliminated.
   const isDev = process.env.NODE_ENV === 'development' && token === 'dev-token'
   if (!isDev) {
@@ -40,20 +44,22 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const cacheKey = permitCacheKey(lat, lon)
-  const staleKey = permitStaleCacheKey(lat, lon)
+  const cacheKey = permitCacheKey(lat, lon, registry.domain)
+  const staleKey = permitStaleCacheKey(lat, lon, registry.domain)
 
   // Try primary cache first
   const cached = await redis.get<ClassifiedPermit[]>(cacheKey)
   if (cached) {
-    return NextResponse.json({ permits: cached, source: 'cache' })
+    return NextResponse.json({ permits: cached, source: 'cache', city: registry.city })
   }
 
-  // Fetch fresh data from Socrata
+  // Fetch fresh data from the city's Socrata portal
   let permits: ClassifiedPermit[]
   try {
-    const raw = await fetchPermitsNearby(lat, lon)
-    permits = await Promise.all(raw.map((p) => transformPermit(p, lat, lon)))
+    const raw = await fetchPermitsNearby(lat, lon, registry)
+    permits = await Promise.all(
+      raw.map((p) => transformPermit(p, registry.domain))
+    )
 
     // Write to primary cache (4-hour TTL) and stale cache (no TTL)
     await Promise.all([
@@ -68,28 +74,38 @@ export async function GET(request: NextRequest) {
       lat,
       lon,
       result_count: permits.length,
+      city: registry.city,
     }).then(() => { })
 
-    return NextResponse.json({ permits, source: 'live' })
+    return NextResponse.json({ permits, source: 'live', city: registry.city })
   } catch (err) {
     // Socrata unavailable — try stale fallback
     const stale = await redis.get<ClassifiedPermit[]>(staleKey)
     if (stale) {
-      return NextResponse.json({ permits: stale, source: 'stale' })
+      return NextResponse.json({ permits: stale, source: 'stale', city: registry.city })
     }
-    console.error('Permits fetch failed and no stale cache:', err)
+    console.error(`[permits] ${registry.city} fetch failed and no stale cache:`, err)
     return NextResponse.json({ error: 'Unable to fetch permit data' }, { status: 502 })
   }
 }
 
-async function transformPermit(p: RawPermit, searchLat: number, searchLon: number): Promise<ClassifiedPermit> {
-  const lat = parseFloat(p.latitude ?? p.location?.latitude ?? '0')
-  const lon = parseFloat(p.longitude ?? p.location?.longitude ?? '0')
-  const { severity, reason, communityNote } = classifyPermit(p)
+async function transformPermit(
+  p: NormalizedRawPermit,
+  domain: string
+): Promise<ClassifiedPermit> {
+  const lat = parseFloat(p.latitude ?? '0')
+  const lon = parseFloat(p.longitude ?? '0')
+  const { severity, reason, communityNote } = classifyPermit({
+    permit_type: p.permit_type,
+    work_description: p.work_description,
+    reported_cost: p.reported_cost,
+  })
 
-  // Enrich high-severity permits with Cook County zoning (best-effort)
+  // NOTE(Agent): Cook County enrichment is only available for Chicago / Cook County.
+  // For other cities, zoning_classification will be null. Additional enrichment
+  // providers can be added per-city in Phase 2.
   let zoningClassification: string | null = null
-  if (severity === 'red' && lat && lon) {
+  if (severity === 'red' && lat && lon && domain === 'data.cityofchicago.org') {
     const enriched = await enrichWithCookCounty(lat, lon)
     zoningClassification = enriched?.zoning_classification ?? null
   }
@@ -97,7 +113,7 @@ async function transformPermit(p: RawPermit, searchLat: number, searchLon: numbe
   const parts = [p.street_number, p.street_direction, p.street_name, p.suffix].filter(Boolean)
 
   return {
-    id: p.permit_,
+    id: p.permit_id,
     address: parts.join(' ').trim() || `${lat},${lon}`,
     lat,
     lon,

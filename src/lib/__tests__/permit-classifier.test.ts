@@ -92,9 +92,11 @@ describe('classifyPermit', () => {
                 work_description: 'Interior renovation of office space',
                 reported_cost: 10_000_000,
             })
-            expect(result.severity).toBe('green')
-            expect(result.reason).toBe('Standard permit')
-            expect(result.communityNote).toContain('Renovation')
+            // NOTE(Agent): Renovation with $10M cost now triggers cost-only fallback (red).
+            // Previously this was always green because it wasn't "new construction".
+            // The new classifier recognizes high-cost projects regardless of type.
+            expect(result.severity).toBe('red')
+            expect(result.reason).toContain('High-cost')
         })
 
         it('classifies low-cost new construction as green', () => {
@@ -131,6 +133,47 @@ describe('classifyPermit', () => {
                 reported_cost: '3000000' as unknown as number,
             })
             expect(result.severity).toBe('yellow')
+        })
+    })
+
+    describe('cost-only fallback for non-Chicago permit types', () => {
+        it('classifies unknown permit type with $5M+ as red', () => {
+            const result = classifyPermit({
+                permit_type: 'Building Permit - Commercial',
+                work_description: 'Construct new commercial building',
+                reported_cost: 8_000_000,
+            })
+            expect(result.severity).toBe('red')
+            expect(result.reason).toContain('High-cost')
+        })
+
+        it('classifies unknown permit type with $1M-$5M as yellow', () => {
+            const result = classifyPermit({
+                permit_type: 'Commercial Building Permit',
+                work_description: 'Construct retail space',
+                reported_cost: 2_500_000,
+            })
+            expect(result.severity).toBe('yellow')
+            expect(result.reason).toContain('Mid-cost')
+        })
+
+        it('classifies unknown permit type with low cost as green', () => {
+            const result = classifyPermit({
+                permit_type: 'Residential Alteration',
+                work_description: 'Replace kitchen countertops',
+                reported_cost: 15_000,
+            })
+            expect(result.severity).toBe('green')
+        })
+
+        it('flags unknown permit type with high-impact keywords as red', () => {
+            const result = classifyPermit({
+                permit_type: 'Commercial Permit',
+                work_description: 'New warehouse and distribution facility',
+                reported_cost: 500_000,
+            })
+            expect(result.severity).toBe('red')
+            expect(result.reason).toContain('High-impact')
         })
     })
 

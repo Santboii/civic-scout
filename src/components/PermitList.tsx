@@ -46,7 +46,7 @@ export default function PermitList({ permits }: PermitListProps) {
           No significant developments found.
         </p>
         <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-          Try searching a different Chicago address.
+          Try searching a different address.
         </p>
       </div>
     )

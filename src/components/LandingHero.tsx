@@ -27,7 +27,7 @@ export default function LandingHero({ onSearch, isLoading }: LandingHeroProps) {
                     <span className={styles.brandName}>
                         Civic<span className={styles.brandAccent}>Scout</span>
                     </span>
-                    <span className={styles.badge}>Chicago</span>
+                    <span className={styles.badge}>Nationwide</span>
                 </div>
 
                 {/* Headline */}
@@ -39,7 +39,7 @@ export default function LandingHero({ onSearch, isLoading }: LandingHeroProps) {
 
                 <p className={styles.subtitle}>
                     Track building permits, zoning changes, and development activity
-                    near any Chicago address — before the construction starts.
+                    near any US address — before the construction starts.
                 </p>
 
                 {/* Search CTA */}
@@ -59,7 +59,7 @@ export default function LandingHero({ onSearch, isLoading }: LandingHeroProps) {
                         <span className={styles.featureIcon}>📡</span>
                         <span className={styles.featureTitle}>Real-Time Data</span>
                         <p className={styles.featureDesc}>
-                            Sourced live from the City of Chicago open data portal
+                            Sourced live from municipal open data portals
                         </p>
                     </div>
                     <div className={styles.featureCard}>
@@ -82,7 +82,7 @@ export default function LandingHero({ onSearch, isLoading }: LandingHeroProps) {
                 <div className={styles.trust}>
                     <span className={styles.trustDot} />
                     <p className={styles.trustText}>
-                        Powered by City of Chicago Open Data &amp; Cook County GIS
+                        Powered by municipal open data portals across the US
                     </p>
                 </div>
             </div>

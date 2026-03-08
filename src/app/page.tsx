@@ -30,6 +30,8 @@ function HomeContent() {
   const [token, setToken] = useState<string | null>(null)
   const [showPayment, setShowPayment] = useState(false)
   const [dataSource, setDataSource] = useState<string>('')
+  const [cityName, setCityName] = useState<string>('')
+  const [unsupportedArea, setUnsupportedArea] = useState(false)
   const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
   const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
 
@@ -100,6 +102,7 @@ function HomeContent() {
   const fetchPermits = useCallback(
     async (lat: number, lon: number, accessToken: string) => {
       setLoading(true)
+      setUnsupportedArea(false)
       try {
         const res = await fetch(`/api/permits?lat=${lat}&lon=${lon}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -111,6 +114,14 @@ function HomeContent() {
           return
         }
 
+        if (res.status === 422) {
+          // No registry entry for this location
+          setUnsupportedArea(true)
+          setPermits([])
+          setCityName('')
+          return
+        }
+
         const data = await res.json()
         if (data.error) {
           console.error('API Error:', data.error)
@@ -118,7 +129,8 @@ function HomeContent() {
         } else {
           setPermits(data.permits ?? [])
           setDataSource(data.source ?? '')
-          setShowPayment(false) // Hide payment if we got data
+          setCityName(data.city ?? '')
+          setShowPayment(false)
         }
       } catch (err) {
         console.error('Fetch failed:', err)
@@ -210,7 +222,7 @@ function HomeContent() {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              Chicago
+              {cityName || 'Nationwide'}
             </span>
           </div>
           <div className="flex-1 max-w-xl">
@@ -297,6 +309,28 @@ function HomeContent() {
                     Showing cached data (live data unavailable)
                   </p>
                 )}
+                {unsupportedArea && (
+                  <div
+                    className="mt-3 p-3 rounded-lg text-center"
+                    style={{
+                      backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                      border: '1px solid rgba(245, 158, 11, 0.2)',
+                    }}
+                  >
+                    <p
+                      className="text-[12px] font-semibold"
+                      style={{ color: 'var(--status-yellow)', marginBottom: '4px' }}
+                    >
+                      No permit data available for this area yet
+                    </p>
+                    <p
+                      className="text-[10px]"
+                      style={{ color: 'var(--text-muted)', marginBottom: 0 }}
+                    >
+                      CivicScout is expanding to new cities. Check back soon!
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -324,7 +358,10 @@ function HomeContent() {
               </h3>
               <div className="space-y-3">
                 <a
-                  href="https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu"
+                  href={cityName === 'Chicago'
+                    ? 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu'
+                    : '#'
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-start gap-3 group rounded-lg p-2.5 -mx-2.5 transition-colors"
@@ -349,53 +386,55 @@ function HomeContent() {
                       className="text-[11px] font-semibold leading-tight"
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      City of Chicago Open Data
+                      {cityName ? `${cityName} Open Data` : 'Municipal Open Data'}
                     </p>
                     <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                       Real-time building permit records
                     </p>
                   </div>
                 </a>
-                <a
-                  href="https://maps.cookcountyil.gov/cookviewer/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-3 group rounded-lg p-2.5 -mx-2.5 transition-colors"
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(27, 155, 108, 0.06)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent'
-                  }}
-                >
-                  <div
-                    className="p-1.5 rounded-md"
-                    style={{
-                      backgroundColor: 'rgba(27, 155, 108, 0.06)',
-                      border: '1px solid var(--border-glass)',
+                {cityName === 'Chicago' && (
+                  <a
+                    href="https://maps.cookcountyil.gov/cookviewer/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3 group rounded-lg p-2.5 -mx-2.5 transition-colors"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(27, 155, 108, 0.06)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent'
                     }}
                   >
-                    <span className="text-xs">🗺️</span>
-                  </div>
-                  <div>
-                    <p
-                      className="text-[11px] font-semibold leading-tight"
-                      style={{ color: 'var(--text-primary)' }}
+                    <div
+                      className="p-1.5 rounded-md"
+                      style={{
+                        backgroundColor: 'rgba(27, 155, 108, 0.06)',
+                        border: '1px solid var(--border-glass)',
+                      }}
                     >
-                      Cook County GIS
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      Zoning & property classification
-                    </p>
-                  </div>
-                </a>
+                      <span className="text-xs">🗺️</span>
+                    </div>
+                    <div>
+                      <p
+                        className="text-[11px] font-semibold leading-tight"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        Cook County GIS
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        Zoning & property classification
+                      </p>
+                    </div>
+                  </a>
+                )}
               </div>
               <p
                 className="mt-6 text-[10px] leading-relaxed italic"
                 style={{ color: 'var(--text-muted)' }}
               >
                 Note: This tool provides impact analysis based on public records. Always verify
-                details with the Department of Buildings for official use.
+                details with your local building department for official use.
               </p>
             </div>
           </aside>

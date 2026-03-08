@@ -107,7 +107,7 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
             >
               <div className="text-left">
                 <p className="font-bold text-sm">Unlimited Plan</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">Search any Chicago address</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">Search any US address</p>
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-xl font-black">$5</span>

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { redis, permitCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
-import { fetchPermitsNearby } from '@/lib/socrata'
+import { fetchPermitsNearby, NormalizedRawPermit } from '@/lib/socrata'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { enrichWithCookCounty } from '@/lib/cook-county'
-import { RawPermit } from '@/lib/socrata'
+import { findCityByCoords } from '@/lib/city-registry'
 
 export const runtime = 'nodejs'
 
 // Top Chicago neighborhoods by population density — pre-warm these on cron schedule
+// NOTE(Agent): For Phase 1, we keep Chicago-only hot spots. Phase 2 will
+// query recent popular searches from the `searches` table per city.
 const HOT_SPOTS: Array<{ lat: number; lon: number; name: string }> = [
   { lat: 41.8827, lon: -87.6233, name: 'The Loop' },
   { lat: 41.8956, lon: -87.6310, name: 'River North' },
@@ -29,7 +31,14 @@ export async function GET(request: NextRequest) {
   const results: Record<string, string> = {}
 
   for (const spot of HOT_SPOTS) {
-    const cacheKey = permitCacheKey(spot.lat, spot.lon)
+    // Resolve city from coordinates using the registry
+    const registry = await findCityByCoords(spot.lat, spot.lon)
+    if (!registry) {
+      results[spot.name] = 'skipped (no registry)'
+      continue
+    }
+
+    const cacheKey = permitCacheKey(spot.lat, spot.lon, registry.domain)
     try {
       const existing = await redis.get(cacheKey)
       if (existing) {
@@ -37,9 +46,9 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      const raw = await fetchPermitsNearby(spot.lat, spot.lon)
+      const raw = await fetchPermitsNearby(spot.lat, spot.lon, registry)
       const permits: ClassifiedPermit[] = await Promise.all(
-        raw.map((p: RawPermit) => transformPermit(p))
+        raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
       )
       await redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS })
       results[spot.name] = `warmed (${permits.length} permits)`
@@ -51,20 +60,27 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ warmed: results })
 }
 
-async function transformPermit(p: RawPermit): Promise<ClassifiedPermit> {
-  const lat = parseFloat(p.latitude ?? p.location?.latitude ?? '0')
-  const lon = parseFloat(p.longitude ?? p.location?.longitude ?? '0')
-  const { severity, reason, communityNote } = classifyPermit(p)
+async function transformPermit(
+  p: NormalizedRawPermit,
+  domain: string
+): Promise<ClassifiedPermit> {
+  const lat = parseFloat(p.latitude ?? '0')
+  const lon = parseFloat(p.longitude ?? '0')
+  const { severity, reason, communityNote } = classifyPermit({
+    permit_type: p.permit_type,
+    work_description: p.work_description,
+    reported_cost: p.reported_cost,
+  })
 
   let zoningClassification: string | null = null
-  if (severity === 'red' && lat && lon) {
+  if (severity === 'red' && lat && lon && domain === 'data.cityofchicago.org') {
     const enriched = await enrichWithCookCounty(lat, lon)
     zoningClassification = enriched?.zoning_classification ?? null
   }
 
   const parts = [p.street_number, p.street_direction, p.street_name, p.suffix].filter(Boolean)
   return {
-    id: p.permit_,
+    id: p.permit_id,
     address: parts.join(' ').trim() || `${lat},${lon}`,
     lat,
     lon,
