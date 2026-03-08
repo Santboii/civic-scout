@@ -8,6 +8,7 @@ import type { ClassifiedPermit } from '@/lib/permit-classifier'
 interface MapProps {
   permits: ClassifiedPermit[]
   center: [number, number]
+  onPermitSelect?: (permit: ClassifiedPermit) => void
 }
 
 // NOTE(Agent): Hex values required for inline HTML Leaflet markers/popups
@@ -23,7 +24,7 @@ const TEXT_PRIMARY = '#1A1D26'
 const TEXT_SECONDARY = '#5C6370'
 const TEXT_MUTED = '#9CA3AF'
 
-export default function Map({ permits, center }: MapProps) {
+export default function Map({ permits, center, onPermitSelect }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<L.Marker[]>([])
@@ -76,15 +77,15 @@ export default function Map({ permits, center }: MapProps) {
       className: '',
       html: `
         <div style="position:relative">
-          <div style="position:absolute;inset:-4px;border-radius:50%;background:rgba(10,158,142,0.2);animation:pulse 2s ease-in-out infinite"></div>
-          <div style="width:14px;height:14px;border-radius:50%;border:2px solid ${ACCENT_TEAL};background:${ACCENT_TEAL};box-shadow:0 0 12px rgba(10,158,142,0.35);display:flex;align-items:center;justify-content:center">
-            <div style="width:4px;height:4px;border-radius:50%;background:white"></div>
+          <div style="position:absolute;inset:-5px;border-radius:50%;background:rgba(10,158,142,0.2);animation:pulse 2s ease-in-out infinite"></div>
+          <div style="width:18px;height:18px;border-radius:50%;border:2px solid ${ACCENT_TEAL};background:${ACCENT_TEAL};box-shadow:0 0 12px rgba(10,158,142,0.35);display:flex;align-items:center;justify-content:center">
+            <div style="width:5px;height:5px;border-radius:50%;background:white"></div>
           </div>
         </div>
         <style>@keyframes pulse{0%,100%{transform:scale(1);opacity:0.6}50%{transform:scale(1.8);opacity:0}}</style>
       `,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
     })
     const centerMarker = L.marker(center, { icon: centerIcon }).addTo(map)
     markersRef.current.push(centerMarker)
@@ -105,9 +106,9 @@ export default function Map({ permits, center }: MapProps) {
       const color = SEVERITY_COLORS[permit.severity] ?? '#9CA3AF'
       const permitIcon = L.divIcon({
         className: '',
-        html: `<div style="width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,0.8);background:${color};box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:pointer;transition:transform 0.15s"></div>`,
-        iconSize: [10, 10],
-        iconAnchor: [5, 5],
+        html: `<div style="width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,0.9);background:${color};box-shadow:0 1px 6px rgba(0,0,0,0.25);cursor:pointer;transition:transform 0.15s"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
       })
 
       const popupContent = `
@@ -123,12 +124,24 @@ export default function Map({ permits, center }: MapProps) {
             </span>
             ${permit.reported_cost ? `<span style="font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(200,136,10,0.08);color:#C8880A;border:1px solid rgba(200,136,10,0.15)">$${(permit.reported_cost / 1e6).toFixed(1)}M</span>` : ''}
           </div>
+          <button data-permit-id="${permit.id}" style="display:block;width:100%;margin-top:10px;padding:7px 0;border:none;border-radius:6px;background:${ACCENT_TEAL};color:#fff;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:0.02em;transition:opacity 0.15s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">View Details →</button>
         </div>
       `
 
       const marker = L.marker([permit.lat, permit.lon], { icon: permitIcon })
         .bindPopup(popupContent, { offset: [0, -5], maxWidth: 300, className: 'modern-map-popup' })
         .addTo(map)
+
+      // NOTE(Agent): Leaflet popups are raw HTML, so we attach a native click listener
+      // to the "View Details" button after the popup opens to bridge into React state.
+      marker.on('popupopen', () => {
+        const popupEl = marker.getPopup()?.getElement()
+        const btn = popupEl?.querySelector(`[data-permit-id="${permit.id}"]`)
+        btn?.addEventListener('click', () => {
+          onPermitSelect?.(permit)
+          marker.closePopup()
+        })
+      })
 
       markersRef.current.push(marker)
     })

@@ -6,7 +6,9 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import SearchForm from '@/components/SearchForm'
 import PermitList from '@/components/PermitList'
 import SeverityFilter from '@/components/SeverityFilter'
+import LandingHero from '@/components/LandingHero'
 import PaymentModal from '@/components/PaymentModal'
+import PermitDetailModal from '@/components/PermitDetailModal'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
 import type { PermitSeverity } from '@/lib/permit-classifier'
 
@@ -29,6 +31,7 @@ function HomeContent() {
   const [showPayment, setShowPayment] = useState(false)
   const [dataSource, setDataSource] = useState<string>('')
   const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
+  const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
 
   // NOTE(Agent): Severity order used for filtering — 'green' shows all,
   // 'yellow' shows yellow+red, 'red' shows only red.
@@ -151,6 +154,24 @@ function HomeContent() {
     ? [search.lat, search.lon]
     : [41.8781, -87.6298] // Chicago default (lat, lon)
 
+  // NOTE(Agent): Show the full-viewport landing hero when no search is active.
+  // Once a search is performed (or URL params load one), we switch to the map layout.
+  if (!search) {
+    return (
+      <main style={{ backgroundColor: 'var(--background-primary)' }}>
+        <LandingHero onSearch={handleSearch} isLoading={loading} />
+        {showPayment && (
+          <PaymentModal
+            address=""
+            lat={0}
+            lon={0}
+            onClose={() => setShowPayment(false)}
+          />
+        )}
+      </main>
+    )
+  }
+
   return (
     <main className="flex flex-col h-screen" style={{ backgroundColor: 'var(--background-primary)' }}>
       {/* Header — Dark editorial glass */}
@@ -202,7 +223,7 @@ function HomeContent() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
         <div className="flex-1 min-h-[50vh] lg:min-h-0 relative">
-          <Map permits={filteredPermits} center={mapCenter} />
+          <Map permits={filteredPermits} center={mapCenter} onPermitSelect={setSelectedMapPermit} />
           {loading && (
             <div
               className="absolute inset-0 flex items-center justify-center z-20"
@@ -387,6 +408,13 @@ function HomeContent() {
           lat={search.lat}
           lon={search.lon}
           onClose={() => setShowPayment(false)}
+        />
+      )}
+
+      {selectedMapPermit && (
+        <PermitDetailModal
+          permit={selectedMapPermit}
+          onClose={() => setSelectedMapPermit(null)}
         />
       )}
     </main>
