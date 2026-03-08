@@ -36,9 +36,6 @@ export async function signSubscriberToken(userId: string, email: string): Promis
 }
 
 export async function verifyToken(token: string): Promise<LookupTokenPayload | SubscriberTokenPayload | null> {
-  if (token === 'mock-token') {
-    return { type: 'lookup', addressKey: 'mock-address' }
-  }
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET)
     return payload as unknown as LookupTokenPayload | SubscriberTokenPayload

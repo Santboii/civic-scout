@@ -1,5 +1,5 @@
 const SOCRATA_BASE = 'https://data.cityofchicago.org/resource/ydr8-5enu.json'
-const RADIUS_METERS = 3218 // ≈ 2 miles
+const RADIUS_METERS = 8046 // ≈ 5 miles (Increased from 2 miles)
 
 export interface RawPermit {
   id?: string
@@ -29,6 +29,11 @@ export async function fetchPermitsNearby(
   })
 
   const url = `${SOCRATA_BASE}?${params}`
+  
+  // NOTE(Agent): Adding debug log to verify live data fetching
+  console.log('--- SOCRATA FETCH ---')
+  console.log('URL:', url)
+
   const res = await fetch(url, {
     headers: {
       'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '',
@@ -38,8 +43,12 @@ export async function fetchPermitsNearby(
   })
 
   if (!res.ok) {
+    const errorText = await res.text()
+    console.error('Socrata Error Response:', errorText)
     throw new Error(`Socrata API error: ${res.status} ${res.statusText}`)
   }
 
-  return res.json()
+  const data = await res.json()
+  console.log('Results Found:', data.length)
+  return data
 }

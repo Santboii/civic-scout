@@ -20,13 +20,14 @@ export async function proxy(request: NextRequest) {
   }
 
   const payload = await verifyToken(token)
-  if (!payload) {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
+  
+  // Temporary Developer Bypass: Allow 'dev-token' in development mode
+  if (!payload && process.env.NODE_ENV === 'development' && token === 'dev-token') {
+    return NextResponse.next()
   }
 
-  // Bypass strict validation for mock data
-  if (process.env.MOCK_DATA === 'true' && token === 'mock-token') {
-    return NextResponse.next()
+  if (!payload) {
+    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
   }
 
   // For lookup tokens, validate the address key matches the requested lat/lon

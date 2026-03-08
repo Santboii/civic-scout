@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 async function transformPermit(p: RawPermit): Promise<ClassifiedPermit> {
   const lat = parseFloat(p.latitude ?? p.location?.latitude ?? '0')
   const lon = parseFloat(p.longitude ?? p.location?.longitude ?? '0')
-  const { severity, reason } = classifyPermit(p)
+  const { severity, reason, communityNote } = classifyPermit(p)
 
   let zoningClassification: string | null = null
   if (severity === 'red' && lat && lon) {
@@ -74,6 +74,7 @@ async function transformPermit(p: RawPermit): Promise<ClassifiedPermit> {
     issue_date: p.issue_date ?? '',
     severity,
     severity_reason: reason,
+    community_note: communityNote,
     zoning_classification: zoningClassification,
   }
 }

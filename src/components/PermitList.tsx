@@ -10,9 +10,27 @@ interface PermitListProps {
 }
 
 const SEVERITY_CONFIG = {
-  red: { icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-100', label: 'High Impact' },
-  yellow: { icon: AlertCircle, color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-100', label: 'Medium Impact' },
-  green: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50', border: 'border-green-100', label: 'Standard' },
+  red: {
+    icon: AlertTriangle,
+    color: 'var(--status-red)',
+    bg: 'rgba(240, 100, 73, 0.08)',
+    border: 'rgba(240, 100, 73, 0.2)',
+    label: 'High Impact',
+  },
+  yellow: {
+    icon: AlertCircle,
+    color: 'var(--status-yellow)',
+    bg: 'rgba(234, 188, 58, 0.08)',
+    border: 'rgba(234, 188, 58, 0.2)',
+    label: 'Medium Impact',
+  },
+  green: {
+    icon: CheckCircle,
+    color: 'var(--status-green)',
+    bg: 'rgba(52, 211, 153, 0.08)',
+    border: 'rgba(52, 211, 153, 0.2)',
+    label: 'Standard',
+  },
 }
 
 export default function PermitList({ permits }: PermitListProps) {
@@ -20,8 +38,16 @@ export default function PermitList({ permits }: PermitListProps) {
 
   if (permits.length === 0) {
     return (
-      <div className="text-center text-gray-400 text-sm py-8">
-        No significant developments found within 2 miles.
+      <div
+        className="text-center text-sm py-12 px-6 rounded-xl border border-dashed"
+        style={{ color: 'var(--text-muted)', borderColor: 'var(--border-strong)' }}
+      >
+        <p className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+          No significant developments found.
+        </p>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+          Try searching a different Chicago address.
+        </p>
       </div>
     )
   }
@@ -33,31 +59,106 @@ export default function PermitList({ permits }: PermitListProps) {
 
   return (
     <>
+      <div className="flex items-center justify-between mb-4 px-1">
+        <h3
+          className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          Results ({permits.length})
+        </h3>
+      </div>
       <ul className="space-y-3">
-        {sorted.map((permit) => {
+        {sorted.map((permit, index) => {
           const config = SEVERITY_CONFIG[permit.severity]
           const Icon = config.icon
           return (
-            <li 
-              key={permit.id} 
-              className={`rounded-xl p-3 border ${config.border} ${config.bg} cursor-pointer hover:shadow-md transition-all active:scale-[0.98] group`}
+            <li
+              key={permit.id}
+              className="glass-elevated rounded-xl p-4 transition-all cursor-pointer active:scale-[0.99] group relative overflow-hidden animate-fade-slide-up"
+              style={{
+                animationDelay: `${index * 50}ms`,
+              }}
               onClick={() => setSelectedPermit(permit)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(13, 200, 180, 0.25)'
+                e.currentTarget.style.boxShadow = '0 0 16px rgba(13, 200, 180, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = ''
+                e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+              }}
             >
-              <div className="flex items-start gap-2">
-                <Icon size={16} className={`${config.color} mt-0.5 shrink-0`} />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate group-hover:text-black transition-colors">{permit.address}</p>
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-tight mt-0.5">{permit.permit_type}</p>
-                  {permit.work_description && (
-                    <p className="text-xs text-gray-600 mt-1.5 line-clamp-2 leading-relaxed">{permit.work_description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
+              {/* Severity side accent */}
+              <div
+                className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+                style={{ backgroundColor: config.color }}
+              />
+
+              <div className="flex items-start gap-3 pl-1">
+                <div
+                  className="p-2 rounded-lg shrink-0"
+                  style={{ backgroundColor: config.bg }}
+                >
+                  <Icon size={16} style={{ color: config.color }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p
+                      className="text-sm font-semibold truncate"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {permit.address}
+                    </p>
                     {permit.reported_cost > 0 && (
-                      <span className="text-[11px] font-bold text-gray-700 bg-white/50 px-1.5 py-0.5 rounded border border-gray-100">
+                      <span
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                        style={{
+                          backgroundColor: 'rgba(232, 168, 50, 0.1)',
+                          color: 'var(--accent-warm)',
+                          border: '1px solid rgba(232, 168, 50, 0.2)',
+                        }}
+                      >
                         ${(permit.reported_cost / 1e6).toFixed(1)}M
                       </span>
                     )}
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{config.label}</span>
+                  </div>
+
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-tight mt-1"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    {permit.permit_type}
+                  </p>
+
+                  {permit.community_note && (
+                    <p
+                      className="text-xs mt-2 line-clamp-2 leading-relaxed"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      {permit.community_note}
+                    </p>
+                  )}
+
+                  <div
+                    className="flex items-center gap-2 mt-3 pt-3 border-t"
+                    style={{ borderTopColor: 'var(--border-glass)' }}
+                  >
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-widest"
+                      style={{ color: config.color }}
+                    >
+                      {config.label}
+                    </span>
+                    <span
+                      className="w-1 h-1 rounded-full"
+                      style={{ backgroundColor: 'var(--border-strong)' }}
+                    />
+                    <span
+                      className="text-[10px] font-medium"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {new Date(permit.issue_date).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -67,9 +168,9 @@ export default function PermitList({ permits }: PermitListProps) {
       </ul>
 
       {selectedPermit && (
-        <PermitDetailModal 
-          permit={selectedPermit} 
-          onClose={() => setSelectedPermit(null)} 
+        <PermitDetailModal
+          permit={selectedPermit}
+          onClose={() => setSelectedPermit(null)}
         />
       )}
     </>
