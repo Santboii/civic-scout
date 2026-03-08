@@ -11,35 +11,56 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Query too short' }, { status: 400 })
   }
 
-  // NOTE(Agent): Removed the old ", Chicago, IL" suffix and viewbox/bounded params
-  // that locked geocoding to Chicago only. Now uses countrycodes=us to scope to the US
-  // while allowing nationwide geocoding for multi-city support.
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+  if (!token) {
+    console.error('[geocode] NEXT_PUBLIC_MAPBOX_TOKEN is not set')
+    return NextResponse.json({ error: 'Geocoding unavailable' }, { status: 503 })
+  }
+
+  // NOTE(Agent): Switched from Nominatim to Mapbox Geocoding v6 for
+  // significantly better address autocomplete quality. The `autocomplete=true`
+  // flag enables prefix matching so partial input like "123 Mai" returns
+  // relevant address suggestions immediately.
   const params = new URLSearchParams({
     q: query,
-    format: 'json',
-    addressdetails: '1',
+    access_token: token,
+    autocomplete: 'true',
+    country: 'us',
+    types: 'address',
     limit: '5',
-    countrycodes: 'us',
+    language: 'en',
   })
 
-  const url = `https://nominatim.openstreetmap.org/search?${params}`
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'CivicScout/1.0 (contact@socialsgenie.com)',
-    },
-  })
+  const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`
+  const res = await fetch(url)
 
   if (!res.ok) {
+    console.error('[geocode] Mapbox API error:', res.status, await res.text())
     return NextResponse.json({ error: 'Geocoding failed' }, { status: 502 })
   }
 
   const data = await res.json()
-  const results = data.map((item: Record<string, unknown>) => ({
-    address: item.display_name as string,
-    normalizedAddress: normalizeAddress(item.display_name as string),
-    lat: parseFloat(item.lat as string),
-    lon: parseFloat(item.lon as string),
-  }))
+
+  // NOTE(Agent): Mapbox Geocoding v6 returns GeoJSON FeatureCollection.
+  // Each feature has properties.full_address (or properties.name_preferred)
+  // and geometry.coordinates [lon, lat].
+  const features = (data.features ?? []) as Array<{
+    properties: { full_address?: string; name_preferred?: string; place_formatted?: string }
+    geometry: { coordinates: [number, number] }
+  }>
+
+  const results = features.map((f) => {
+    const address =
+      f.properties.full_address ??
+      [f.properties.name_preferred, f.properties.place_formatted].filter(Boolean).join(', ')
+    const [lon, lat] = f.geometry.coordinates
+    return {
+      address,
+      normalizedAddress: normalizeAddress(address),
+      lat,
+      lon,
+    }
+  })
 
   return NextResponse.json({ results })
 }
