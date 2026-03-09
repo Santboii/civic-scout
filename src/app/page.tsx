@@ -187,6 +187,10 @@ function HomeContent() {
 
   return (
     <main className="flex flex-col h-screen" style={{ backgroundColor: 'var(--background-primary)' }}>
+      {/* NOTE(Agent): sr-only h1 ensures search crawlers always find a primary heading
+          in the map view state, where LandingHero (which contains the visible h1) is unmounted.
+          This is critical for SEO — without it the map-view render has zero h1 tags. */}
+      <h1 className="sr-only">Building Permits Near {search?.address ?? 'Your Location'} — CivicScout</h1>
       {/* Header — Dark editorial glass */}
       <header
         className="glass px-4 py-4 z-10 relative"
@@ -368,12 +372,12 @@ function HomeContent() {
 
             {/* Data Attribution Footer */}
             <div className="mt-12 pt-8 border-t" style={{ borderTopColor: 'var(--border-strong)' }}>
-              <h3
+              <h2
                 className="text-[9px] font-semibold uppercase tracking-[0.25em] mb-4"
                 style={{ color: 'var(--text-muted)' }}
               >
                 Data Verification
-              </h3>
+              </h2>
               <div className="space-y-3">
                 <a
                   href={cityName === 'Chicago'
@@ -471,6 +475,7 @@ function HomeContent() {
       {selectedMapPermit && (
         <PermitDetailModal
           permit={selectedMapPermit}
+          cityName={cityName}
           onClose={() => setSelectedMapPermit(null)}
         />
       )}
