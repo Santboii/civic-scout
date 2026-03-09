@@ -232,9 +232,10 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
         </div>
 
         {/* NOTE(Agent): Temporarily show bypass in ALL environments for beta testing.
-            TODO: Remove or re-gate behind NODE_ENV === 'development' once beta period ends. */}
+            TODO: Remove or re-gate behind NODE_ENV === 'development' once beta period ends.
+            Cookie includes max-age so it persists across browser sessions (not a session cookie). */}
         <button
-          onClick={() => { document.cookie = 'ds_session=dev-token; path=/'; window.location.reload(); }}
+          onClick={() => { document.cookie = 'ds_session=dev-token; path=/; max-age=2592000'; window.location.reload(); }}
           className="w-full mt-6 text-xs font-bold transition-colors uppercase tracking-widest"
           style={{ color: 'var(--accent-primary)', opacity: 0.7 }}
         >
