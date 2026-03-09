@@ -4,7 +4,7 @@ import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
 import { enrichWithCookCounty } from '@/lib/cook-county'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { verifyToken, extractToken } from '@/lib/auth'
-import { findCityByCoords } from '@/lib/city-registry'
+import { findAllCitiesByCoords } from '@/lib/city-registry'
 import { createServiceClient } from '@/lib/supabase'
 
 export const runtime = 'edge'
@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'lat and lon are required' }, { status: 400 })
   }
 
-  // Resolve city from coordinates using the registry
-  const registry = await findCityByCoords(lat, lon)
-  if (!registry) {
+  // Resolve all matching city registries from coordinates
+  const registries = await findAllCitiesByCoords(lat, lon)
+  if (registries.length === 0) {
     return NextResponse.json(
       { error: 'No permit data available for this area yet', supported: false },
       { status: 422 }
@@ -45,28 +45,54 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const cacheKey = permitCacheKey(lat, lon, registry.domain)
-  const staleKey = permitStaleCacheKey(lat, lon, registry.domain)
+  // NOTE(Agent): Use the primary (highest-priority) registry for cache keys.
+  // Multi-source results are cached together under a single key.
+  const primaryDomain = registries[0].domain
+  const cacheKey = permitCacheKey(lat, lon, primaryDomain)
+  const staleKey = permitStaleCacheKey(lat, lon, primaryDomain)
 
   // Try primary cache first
   const cached = await redis.get<ClassifiedPermit[]>(cacheKey)
   if (cached) {
-    // NOTE(Agent): Cache hit — permit data is already fresh from Redis (4h TTL).
-    // Allow browser to reuse for 5 min; serve stale for up to 1h while revalidating.
-    // Private because responses are auth-gated (token per user).
+    const cityNames = registries.map((r) => r.city).join(', ')
     return NextResponse.json(
-      { permits: cached, source: 'cache', city: registry.city },
+      { permits: cached, source: 'cache', city: cityNames },
       { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=3600' } }
     )
   }
 
-  // Fetch fresh data from the city's Socrata portal
+  // Fetch fresh data from ALL matching registries in parallel
   let permits: ClassifiedPermit[]
   try {
-    const raw = await fetchPermitsForCity(lat, lon, registry)
-    permits = await Promise.all(
-      raw.map((p) => transformPermit(p, registry.domain))
+    // NOTE(Agent): Query all registries in parallel. If one fails, we still
+    // use results from the others. Only throw if ALL fail.
+    const results = await Promise.allSettled(
+      registries.map(async (registry) => {
+        const raw = await fetchPermitsForCity(lat, lon, registry)
+        return Promise.all(
+          raw.map((p) => transformPermit(p, registry.domain))
+        )
+      })
     )
+
+    const allPermits: ClassifiedPermit[] = []
+    let anySucceeded = false
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        allPermits.push(...result.value)
+        anySucceeded = true
+      } else {
+        console.warn('[permits] One registry failed:', result.reason)
+      }
+    }
+
+    if (!anySucceeded) {
+      throw new Error('All registries failed')
+    }
+
+    // Deduplicate by permit ID (in case of overlap)
+    const deduped = [...new Map(allPermits.map((p) => [p.id, p])).values()]
+    permits = deduped
 
     // Write to primary cache (4-hour TTL) and stale cache (no TTL)
     await Promise.all([
@@ -76,29 +102,29 @@ export async function GET(request: NextRequest) {
 
     // Log search to Supabase (best-effort)
     const supabase = createServiceClient()
+    const cityNames = registries.map((r) => r.city).join(', ')
     supabase.from('searches').insert({
       address: searchParams.get('address') ?? '',
       lat,
       lon,
       result_count: permits.length,
-      city: registry.city,
+      city: cityNames,
     }).then(() => { })
 
-    // NOTE(Agent): Live fetch — shorter browser TTL (2 min) since data was just ingested.
     return NextResponse.json(
-      { permits, source: 'live', city: registry.city },
+      { permits, source: 'live', city: cityNames },
       { headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=1800' } }
     )
   } catch (err) {
-    // Socrata unavailable — try stale fallback
+    // All sources unavailable — try stale fallback
     const stale = await redis.get<ClassifiedPermit[]>(staleKey)
     if (stale) {
       return NextResponse.json(
-        { permits: stale, source: 'stale', city: registry.city },
+        { permits: stale, source: 'stale', city: registries[0].city },
         { headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=600' } }
       )
     }
-    console.error(`[permits] ${registry.city} fetch failed and no stale cache:`, err)
+    console.error('[permits] All registries failed and no stale cache:', err)
     return NextResponse.json({ error: 'Unable to fetch permit data' }, { status: 502 })
   }
 }
@@ -115,20 +141,26 @@ async function transformPermit(
     reported_cost: p.reported_cost,
   })
 
-  // NOTE(Agent): Cook County enrichment is only available for Chicago / Cook County.
-  // For other cities, zoning_classification will be null. Additional enrichment
-  // providers can be added per-city in Phase 2.
+  // NOTE(Agent): Cook County enrichment works for any Cook County domain,
+  // including Chicago's Socrata portal and the Assessor's suburban dataset.
+  const isCookCounty = domain === 'data.cityofchicago.org' || domain === 'datacatalog.cookcountyil.gov'
   let zoningClassification: string | null = null
-  if (severity === 'red' && lat && lon && domain === 'data.cityofchicago.org') {
+  if (severity === 'red' && lat && lon && isCookCounty) {
     const enriched = await enrichWithCookCounty(lat, lon)
     zoningClassification = enriched?.zoning_classification ?? null
   }
 
+  // NOTE(Agent): Build display address from components first, then fall back to
+  // full_address (Cook County suburbs), then coordinates as last resort.
   const parts = [p.street_number, p.street_direction, p.street_name, p.suffix].filter(Boolean)
+  const componentAddress = parts.join(' ').trim()
+  const displayAddress = componentAddress
+    || (p.full_address ? cleanDisplayAddress(p.full_address) : '')
+    || `${lat},${lon}`
 
   return {
     id: p.permit_id,
-    address: parts.join(' ').trim() || `${lat},${lon}`,
+    address: displayAddress,
     lat,
     lon,
     permit_type: p.permit_type ?? '',
@@ -141,4 +173,18 @@ async function transformPermit(
     community_note: communityNote,
     zoning_classification: zoningClassification,
   }
+}
+
+/**
+ * Clean up a Cook County Assessor mailing address for UI display.
+ * Strips truncated municipality prefixes like "VILLAGE OF RIVER F"
+ * and the trailing state/zip, keeping just the street portion.
+ */
+function cleanDisplayAddress(address: string): string {
+  // Extract just "539 WILLIAM ST" from "539 WILLIAM ST, VILLAGE OF RIVER F, IL 60305"
+  const firstComma = address.indexOf(',')
+  if (firstComma > 0) {
+    return address.slice(0, firstComma).trim()
+  }
+  return address.trim()
 }

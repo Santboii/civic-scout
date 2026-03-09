@@ -3,7 +3,7 @@ import { redis, permitCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
 import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { enrichWithCookCounty } from '@/lib/cook-county'
-import { findCityByCoords } from '@/lib/city-registry'
+import { findAllCitiesByCoords } from '@/lib/city-registry'
 
 export const runtime = 'nodejs'
 
@@ -31,14 +31,16 @@ export async function GET(request: NextRequest) {
   const results: Record<string, string> = {}
 
   for (const spot of HOT_SPOTS) {
-    // Resolve city from coordinates using the registry
-    const registry = await findCityByCoords(spot.lat, spot.lon)
-    if (!registry) {
+    // Resolve all matching registries from coordinates
+    const registries = await findAllCitiesByCoords(spot.lat, spot.lon)
+    if (registries.length === 0) {
       results[spot.name] = 'skipped (no registry)'
       continue
     }
 
-    const cacheKey = permitCacheKey(spot.lat, spot.lon, registry.domain)
+    // NOTE(Agent): Use primary registry domain for cache key (same as permits API)
+    const primaryDomain = registries[0].domain
+    const cacheKey = permitCacheKey(spot.lat, spot.lon, primaryDomain)
     try {
       const existing = await redis.get(cacheKey)
       if (existing) {
@@ -46,12 +48,26 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
-      const permits: ClassifiedPermit[] = await Promise.all(
-        raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
+      // Fetch from all registries in parallel, merge, dedup
+      const fetchResults = await Promise.allSettled(
+        registries.map(async (registry) => {
+          const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
+          return Promise.all(
+            raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
+          )
+        })
       )
+
+      const allPermits: ClassifiedPermit[] = []
+      for (const result of fetchResults) {
+        if (result.status === 'fulfilled') {
+          allPermits.push(...result.value)
+        }
+      }
+
+      const permits = [...new Map(allPermits.map((p) => [p.id, p])).values()]
       await redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS })
-      results[spot.name] = `warmed (${permits.length} permits)`
+      results[spot.name] = `warmed (${permits.length} permits from ${registries.length} sources)`
     } catch (err) {
       results[spot.name] = `error: ${String(err)}`
     }
@@ -72,16 +88,21 @@ async function transformPermit(
     reported_cost: p.reported_cost,
   })
 
+  const isCookCounty = domain === 'data.cityofchicago.org' || domain === 'datacatalog.cookcountyil.gov'
   let zoningClassification: string | null = null
-  if (severity === 'red' && lat && lon && domain === 'data.cityofchicago.org') {
+  if (severity === 'red' && lat && lon && isCookCounty) {
     const enriched = await enrichWithCookCounty(lat, lon)
     zoningClassification = enriched?.zoning_classification ?? null
   }
 
   const parts = [p.street_number, p.street_direction, p.street_name, p.suffix].filter(Boolean)
+  const componentAddress = parts.join(' ').trim()
+  const displayAddress = componentAddress
+    || (p.full_address ? p.full_address.split(',')[0]?.trim() ?? '' : '')
+    || `${lat},${lon}`
   return {
     id: p.permit_id,
-    address: parts.join(' ').trim() || `${lat},${lon}`,
+    address: displayAddress,
     lat,
     lon,
     permit_type: p.permit_type ?? '',

@@ -81,13 +81,20 @@ const IMPACT_CATEGORIES: Record<string, ImpactCategory> = {
 // ── Severity classification (unchanged logic) ───────────────────────────────
 
 const HIGH_IMPACT_KEYWORDS = [
-  'data center', 'factory', 'industrial', 'manufacturing', 'warehouse',
+  'data center', 'factory', 'industrial facility', 'industrial park',
+  'industrial site', 'manufacturing', 'warehouse',
   'logistics', 'distribution', 'power plant', 'substation', 'refinery',
   'planned development',
 ]
 
 const HIGH_COST_THRESHOLD = 5_000_000
 const MEDIUM_COST_THRESHOLD = 1_000_000
+
+// NOTE(Agent): Cost floors for keyword-only severity. A $19K tuckpointing job
+// mentioning "industrial enamel paint" should not be RED. Below these thresholds
+// the keyword-only path downgrades: <$50K → green, <$100K → yellow.
+const KEYWORD_RED_COST_FLOOR = 100_000
+const KEYWORD_YELLOW_COST_FLOOR = 50_000
 
 // ── Cost formatting helper ──────────────────────────────────────────────────
 
@@ -246,11 +253,20 @@ export function classifyPermit(permit: {
     severity = 'yellow'
     reason = `New construction $${(MEDIUM_COST_THRESHOLD / 1e6).toFixed(0)}M–$${(HIGH_COST_THRESHOLD / 1e6).toFixed(0)}M`
   } else if (!isNewConstruction && hasHighImpactKeyword) {
-    // NOTE(Agent): Cost-only fallback for non-Chicago cities whose permit_type
-    // strings don't match known patterns. When high-impact keywords are present
-    // in the description, classify as red regardless of permit_type.
-    severity = 'red'
-    reason = 'High-impact use detected in description'
+    // NOTE(Agent): Keyword-based classification with cost floors. High-impact
+    // keywords in the description signal potential community impact, but only
+    // at meaningful project sizes. Low-cost permits with incidental keyword
+    // matches (e.g. "industrial enamel paint" on a $19K repair) are downgraded.
+    if (cost >= KEYWORD_RED_COST_FLOOR) {
+      severity = 'red'
+      reason = 'High-impact use detected in description'
+    } else if (cost >= KEYWORD_YELLOW_COST_FLOOR) {
+      severity = 'yellow'
+      reason = 'Possible high-impact use (moderate cost)'
+    } else {
+      severity = 'green'
+      reason = 'Standard permit'
+    }
   } else if (!isNewConstruction && cost >= HIGH_COST_THRESHOLD) {
     // NOTE(Agent): Cost-only fallback — large project without recognized permit type
     severity = 'red'
