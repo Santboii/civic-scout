@@ -29,6 +29,8 @@ const CHICAGO_REGISTRY: CityRegistry = {
     priority: 10,
     verified: true,
     enabled: true,
+    data_source_type: 'socrata' as const,
+    arcgis_url: null,
 }
 
 const SEATTLE_REGISTRY: CityRegistry = {
@@ -53,6 +55,8 @@ const SEATTLE_REGISTRY: CityRegistry = {
     priority: 10,
     verified: true,
     enabled: true,
+    data_source_type: 'socrata' as const,
+    arcgis_url: null,
 }
 
 describe('fetchPermitsNearby', () => {

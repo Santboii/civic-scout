@@ -1,6 +1,25 @@
 import type { CityRegistry } from './city-registry'
+import { fetchPermitsFromArcGIS } from './arcgis'
 
 const RADIUS_METERS = 8046 // ≈ 5 miles
+
+/**
+ * Generic permit fetch router — dispatches to the correct adapter
+ * based on the city registry's data_source_type.
+ */
+export async function fetchPermitsForCity(
+  lat: number,
+  lon: number,
+  registry: CityRegistry
+): Promise<NormalizedRawPermit[]> {
+  switch (registry.data_source_type) {
+    case 'arcgis':
+      return fetchPermitsFromArcGIS(lat, lon, registry)
+    case 'socrata':
+    default:
+      return fetchPermitsNearby(lat, lon, registry)
+  }
+}
 
 /**
  * Raw permit data from any Socrata portal.

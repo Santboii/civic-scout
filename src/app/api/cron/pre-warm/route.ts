@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { redis, permitCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
-import { fetchPermitsNearby, NormalizedRawPermit } from '@/lib/socrata'
+import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { enrichWithCookCounty } from '@/lib/cook-county'
 import { findCityByCoords } from '@/lib/city-registry'
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      const raw = await fetchPermitsNearby(spot.lat, spot.lon, registry)
+      const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
       const permits: ClassifiedPermit[] = await Promise.all(
         raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
       )

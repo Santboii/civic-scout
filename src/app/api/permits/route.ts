@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { redis, permitCacheKey, permitStaleCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
-import { fetchPermitsNearby, NormalizedRawPermit } from '@/lib/socrata'
+import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
 import { enrichWithCookCounty } from '@/lib/cook-county'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { verifyToken, extractToken } from '@/lib/auth'
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
   // Fetch fresh data from the city's Socrata portal
   let permits: ClassifiedPermit[]
   try {
-    const raw = await fetchPermitsNearby(lat, lon, registry)
+    const raw = await fetchPermitsForCity(lat, lon, registry)
     permits = await Promise.all(
       raw.map((p) => transformPermit(p, registry.domain))
     )

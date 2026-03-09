@@ -39,6 +39,8 @@ export interface CityRegistry {
     priority: number
     verified: boolean
     enabled: boolean
+    data_source_type: 'socrata' | 'arcgis'
+    arcgis_url: string | null
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -130,5 +132,7 @@ function mapRow(row: Record<string, unknown>): CityRegistry {
         priority: (row.priority as number) ?? 0,
         verified: (row.verified as boolean) ?? false,
         enabled: (row.enabled as boolean) ?? true,
+        data_source_type: (row.data_source_type as 'socrata' | 'arcgis') ?? 'socrata',
+        arcgis_url: (row.arcgis_url as string) ?? null,
     }
 }

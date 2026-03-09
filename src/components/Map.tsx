@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
@@ -9,6 +9,8 @@ interface MapProps {
   permits: ClassifiedPermit[]
   center: [number, number]
   onPermitSelect?: (permit: ClassifiedPermit) => void
+  selectedPermitId?: string | null
+  onPermitDeselect?: () => void
 }
 
 // NOTE(Agent): Hex values required for inline HTML Leaflet markers/popups
@@ -24,11 +26,15 @@ const TEXT_PRIMARY = '#1A1D26'
 const TEXT_SECONDARY = '#5C6370'
 const TEXT_MUTED = '#9CA3AF'
 
-export default function Map({ permits, center, onPermitSelect }: MapProps) {
+export default function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const markersRef = useRef<L.Marker[]>([])
+  const markersRef = useRef<globalThis.Map<string, L.Marker>>(new globalThis.Map())
   const circleRef = useRef<L.Circle | null>(null)
+  // NOTE(Agent): Track whether the popupclose was triggered programmatically
+  // (e.g. when opening a different marker's popup) vs. by user interaction.
+  // Prevents spurious deselect calls during marker switches.
+  const suppressDeselectRef = useRef(false)
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return
@@ -58,6 +64,29 @@ export default function Map({ permits, center, onPermitSelect }: MapProps) {
     setTimeout(() => { mapRef.current?.invalidateSize() }, 100)
   }, [center])
 
+  // NOTE(Agent): Helper to create a permit marker icon. `isSelected` controls
+  // whether the marker gets the enlarged, glowing "selected" treatment.
+  const createPermitIcon = useCallback((color: string, isSelected: boolean) => {
+    if (isSelected) {
+      return L.divIcon({
+        className: '',
+        html: `<div style="position:relative">
+          <div style="position:absolute;inset:-6px;border-radius:50%;background:${color}33;animation:selectedPulse 2s ease-in-out infinite"></div>
+          <div style="width:24px;height:24px;border-radius:50%;border:3px solid rgba(255,255,255,0.95);background:${color};box-shadow:0 0 14px ${color}66, 0 2px 8px rgba(0,0,0,0.3);cursor:pointer;transition:all 0.2s"></div>
+        </div>
+        <style>@keyframes selectedPulse{0%,100%{transform:scale(1);opacity:0.7}50%{transform:scale(1.6);opacity:0}}</style>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      })
+    }
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,0.9);background:${color};box-shadow:0 1px 6px rgba(0,0,0,0.25);cursor:pointer;transition:transform 0.15s"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    })
+  }, [])
+
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -66,7 +95,7 @@ export default function Map({ permits, center, onPermitSelect }: MapProps) {
     map.invalidateSize()
 
     markersRef.current.forEach((m) => m.remove())
-    markersRef.current = []
+    markersRef.current = new globalThis.Map()
 
     if (circleRef.current) {
       circleRef.current.remove()
@@ -88,7 +117,7 @@ export default function Map({ permits, center, onPermitSelect }: MapProps) {
       iconAnchor: [9, 9],
     })
     const centerMarker = L.marker(center, { icon: centerIcon }).addTo(map)
-    markersRef.current.push(centerMarker)
+    markersRef.current.set('__center__', centerMarker)
 
     // 2-mile radius circle
     circleRef.current = L.circle(center, {
@@ -104,12 +133,8 @@ export default function Map({ permits, center, onPermitSelect }: MapProps) {
     // Permit markers
     permits.forEach((permit) => {
       const color = SEVERITY_COLORS[permit.severity] ?? '#9CA3AF'
-      const permitIcon = L.divIcon({
-        className: '',
-        html: `<div style="width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,0.9);background:${color};box-shadow:0 1px 6px rgba(0,0,0,0.25);cursor:pointer;transition:transform 0.15s"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
-      })
+      const isSelected = permit.id === selectedPermitId
+      const permitIcon = createPermitIcon(color, isSelected)
 
       const popupContent = `
         <div style="padding:12px;font-family:system-ui;min-width:200px;color:${TEXT_PRIMARY}">
@@ -143,9 +168,50 @@ export default function Map({ permits, center, onPermitSelect }: MapProps) {
         })
       })
 
-      markersRef.current.push(marker)
+      markersRef.current.set(permit.id, marker)
     })
-  }, [permits, center])
+
+    // NOTE(Agent): Listen for popup close events on the map to clear the
+    // selected state in the parent. Suppressed during programmatic popup switches.
+    const handlePopupClose = () => {
+      if (!suppressDeselectRef.current) {
+        onPermitDeselect?.()
+      }
+    }
+    map.on('popupclose', handlePopupClose)
+
+    return () => {
+      map.off('popupclose', handlePopupClose)
+    }
+  }, [permits, center, selectedPermitId, createPermitIcon, onPermitSelect, onPermitDeselect])
+
+  // NOTE(Agent): Separate effect to handle flyTo + popup open when a card is selected
+  // from the sidebar. Reads from the markersRef which is populated by the effect above.
+  // Using a separate effect prevents unnecessary marker rebuilds on selection change —
+  // but since selectedPermitId is also in the marker-building effect's deps (for styling),
+  // both run together. This effect handles the animation/popup timing cleanly.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !selectedPermitId) return
+
+    const marker = markersRef.current.get(selectedPermitId)
+    if (!marker) return
+
+    suppressDeselectRef.current = true
+    map.closePopup()
+
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15), {
+      duration: 0.6,
+    })
+
+    // NOTE(Agent): Open the popup after flyTo animation completes.
+    // Leaflet doesn't provide a flyTo completion callback, so we use
+    // a timeout matching the duration.
+    setTimeout(() => {
+      marker.openPopup()
+      suppressDeselectRef.current = false
+    }, 650)
+  }, [selectedPermitId])
 
   return (
     <div className="w-full h-full relative z-0 min-h-[400px]" style={{ backgroundColor: 'var(--background-primary)' }}>
