@@ -150,15 +150,15 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
           <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Secure Payment</span>
         </div>
 
-        {process.env.NODE_ENV === 'development' && (
-          <button
-            onClick={() => { document.cookie = 'ds_session=dev-token; path=/'; window.location.reload(); }}
-            className="w-full mt-6 text-[10px] font-bold transition-colors underline uppercase tracking-widest opacity-20 hover:opacity-60"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            Dev: Bypass Paywall (Live Data)
-          </button>
-        )}
+        {/* NOTE(Agent): Temporarily show bypass in ALL environments for beta testing.
+            TODO: Remove or re-gate behind NODE_ENV === 'development' once beta period ends. */}
+        <button
+          onClick={() => { document.cookie = 'ds_session=dev-token; path=/'; window.location.reload(); }}
+          className="w-full mt-6 text-xs font-bold transition-colors uppercase tracking-widest"
+          style={{ color: 'var(--accent-primary)', opacity: 0.7 }}
+        >
+          Beta: Free Access
+        </button>
       </div>
     </div>
   )

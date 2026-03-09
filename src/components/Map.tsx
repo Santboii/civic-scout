@@ -119,9 +119,9 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
     const centerMarker = L.marker(center, { icon: centerIcon }).addTo(map)
     markersRef.current.set('__center__', centerMarker)
 
-    // 2-mile radius circle
+    // 5-mile radius circle — matches the fetch radius in socrata.ts / arcgis.ts
     circleRef.current = L.circle(center, {
-      radius: 3218,
+      radius: 8046,
       color: ACCENT_TEAL,
       weight: 1.5,
       dashArray: '4, 8',

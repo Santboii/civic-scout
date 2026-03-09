@@ -20,9 +20,10 @@ export async function proxy(request: NextRequest) {
   }
 
   const payload = await verifyToken(token)
-  
-  // Temporary Developer Bypass: Allow 'dev-token' in development mode
-  if (!payload && process.env.NODE_ENV === 'development' && token === 'dev-token') {
+
+  // NOTE(Agent): Temporarily allow 'dev-token' bypass in ALL environments for beta testing.
+  // TODO: Remove this bypass once Stripe payments are fully tested and beta period ends.
+  if (!payload && token === 'dev-token') {
     return NextResponse.next()
   }
 

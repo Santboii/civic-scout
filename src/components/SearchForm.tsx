@@ -12,16 +12,22 @@ interface Suggestion {
 interface SearchFormProps {
   onSearch: (suggestion: Suggestion) => void
   isLoading?: boolean
+  initialValue?: string
 }
 
-export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
-  const [query, setQuery] = useState('')
+export default function SearchForm({ onSearch, isLoading, initialValue }: SearchFormProps) {
+  const [query, setQuery] = useState(initialValue ?? '')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // NOTE(Agent): Only fetch autocomplete suggestions when the user is actively
+  // typing. This prevents fetches on mount (from initialValue) and after
+  // selecting a suggestion (which also sets query programmatically).
+  const isUserTypingRef = useRef(false)
 
   useEffect(() => {
+    if (!isUserTypingRef.current) return
     if (query.length < 4) {
       setSuggestions([])
       return
@@ -39,8 +45,15 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
     }, 300)
   }, [query])
 
+  function handleUserInput(value: string) {
+    isUserTypingRef.current = true
+    setQuery(value)
+  }
+
   function handleSelect(s: Suggestion) {
+    isUserTypingRef.current = false
     setQuery(s.address)
+    setSuggestions([])
     setShowSuggestions(false)
     onSearch(s)
   }
@@ -70,7 +83,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
             color: 'var(--text-primary)',
           }}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleUserInput(e.target.value)}
           onFocus={() => {
             setIsFocused(true)
             if (suggestions.length > 0) setShowSuggestions(true)

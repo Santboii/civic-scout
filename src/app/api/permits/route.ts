@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // NOTE(Agent): In development, allow the hardcoded 'dev-token' to bypass JWT verification.
-  // The PaymentModal dev bypass sets ds_session=dev-token (a plain string, not a JWT).
-  // In production builds, NODE_ENV is always 'production', so this branch is dead-code eliminated.
-  const isDev = process.env.NODE_ENV === 'development' && token === 'dev-token'
+  // NOTE(Agent): Temporarily allow the 'dev-token' bypass in ALL environments (including production)
+  // so beta users can try the app without paying. The PaymentModal sets ds_session=dev-token.
+  // TODO: Remove this bypass once Stripe payments are fully tested and beta period ends.
+  const isDev = token === 'dev-token'
   if (!isDev) {
     const payload = await verifyToken(token)
     if (!payload) {

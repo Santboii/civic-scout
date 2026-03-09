@@ -1,5 +1,6 @@
 import type { CityRegistry } from './city-registry'
 import type { NormalizedRawPermit } from './socrata'
+import { batchGeocode } from './census-geocoder'
 
 const DEFAULT_RADIUS_METERS = 8046 // ≈ 5 miles
 
@@ -81,6 +82,103 @@ export async function fetchPermitsFromArcGIS(
     return data.features.map((f) => normalizeArcGISFeature(f, registry))
 }
 
+/**
+ * Fetch permits from an ArcGIS Feature Service that has NO geometry.
+ *
+ * NOTE(Agent): Some datasets (e.g., Naperville) store only street addresses
+ * without lat/lon. This function fetches recent permits filtered by type,
+ * batch-geocodes addresses, then filters by distance from the search point.
+ * Addresses that fail geocoding are dropped (no map pin possible).
+ */
+export async function fetchPermitsFromArcGISNoGeo(
+    lat: number,
+    lon: number,
+    registry: CityRegistry
+): Promise<NormalizedRawPermit[]> {
+    if (!registry.arcgis_url) {
+        throw new Error(`[arcgis-no-geo] No arcgis_url configured for ${registry.city}`)
+    }
+
+    // Build WHERE clause: type filter + non-null issue date
+    const whereParts = [`${registry.column_map.issue_date} IS NOT NULL`]
+    if (registry.permit_type_filter) {
+        whereParts.push(registry.permit_type_filter)
+    }
+
+    const params = new URLSearchParams({
+        where: whereParts.join(' AND '),
+        outFields: '*',
+        orderByFields: `${registry.column_map.issue_date} DESC`,
+        resultRecordCount: '100',
+        f: 'json',
+    })
+
+    const url = `${registry.arcgis_url}/query?${params}`
+    console.log(`[arcgis-no-geo] Fetching from ${registry.city}:`, url)
+
+    const res = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        next: { revalidate: 0 },
+    })
+
+    if (!res.ok) {
+        const errorText = await res.text()
+        console.error(`[arcgis-no-geo] ${registry.city} error:`, errorText)
+        throw new Error(`ArcGIS API error (${registry.city}): ${res.status} ${res.statusText}`)
+    }
+
+    const data: ArcGISQueryResponse = await res.json()
+    const features = data.features ?? []
+    console.log(`[arcgis-no-geo] ${registry.city} raw features:`, features.length)
+
+    if (features.length === 0) return []
+
+    // Normalize first (without lat/lon — they'll be 0/0)
+    const normalized = features.map((f) => normalizeArcGISFeature(f, registry))
+
+    // Build addresses for geocoding
+    const addressEntries = normalized
+        .map((p) => ({
+            permitId: p.permit_id,
+            address: buildAddressFromPermit(p, registry.city),
+        }))
+        .filter((e) => e.address.length > 5) // Skip empty/tiny addresses
+
+    // Batch geocode
+    const geocodeInput = addressEntries.map((e) => ({
+        address: e.address,
+        city: registry.city,
+    }))
+    const geocoded = await batchGeocode(geocodeInput)
+
+    // Inject coordinates and filter by distance
+    const permitAddressMap = new Map(
+        addressEntries.map((e) => [e.permitId, e.address])
+    )
+
+    const results: NormalizedRawPermit[] = []
+    for (const permit of normalized) {
+        const addr = permitAddressMap.get(permit.permit_id)
+        if (!addr) continue
+
+        const coords = geocoded.get(addr)
+        if (!coords?.lat || !coords?.lon) continue
+
+        // Check if within radius
+        const distance = haversineDistance(lat, lon, coords.lat, coords.lon)
+        if (distance <= DEFAULT_RADIUS_METERS) {
+            results.push({
+                ...permit,
+                latitude: String(coords.lat),
+                longitude: String(coords.lon),
+            })
+        }
+    }
+
+    console.log(`[arcgis-no-geo] ${registry.city}: ${results.length} permits within radius (of ${features.length} fetched)`)
+    return results
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -134,3 +232,36 @@ function normalizeArcGISFeature(
             : undefined,
     }
 }
+
+/**
+ * Build a full geocodable address string from permit fields.
+ */
+function buildAddressFromPermit(permit: NormalizedRawPermit, city: string): string {
+    const parts = [
+        permit.street_number,
+        permit.street_direction,
+        permit.street_name,
+        permit.suffix,
+    ].filter(Boolean)
+
+    if (parts.length === 0) return ''
+    return `${parts.join(' ')}, ${city}, IL`
+}
+
+/**
+ * Haversine formula — distance in meters between two lat/lon points.
+ */
+function haversineDistance(
+    lat1: number, lon1: number,
+    lat2: number, lon2: number
+): number {
+    const R = 6_371_000 // Earth radius in meters
+    const toRad = (deg: number) => (deg * Math.PI) / 180
+    const dLat = toRad(lat2 - lat1)
+    const dLon = toRad(lon2 - lon1)
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+

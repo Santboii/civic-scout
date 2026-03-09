@@ -88,12 +88,95 @@ const HIGH_IMPACT_KEYWORDS = [
 const HIGH_COST_THRESHOLD = 5_000_000
 const MEDIUM_COST_THRESHOLD = 1_000_000
 
-// ── Lead sentences by severity ──────────────────────────────────────────────
+// ── Cost formatting helper ──────────────────────────────────────────────────
 
-const LEAD_SENTENCES: Record<PermitSeverity, string> = {
-  red: 'A large-scale development project is planned for this area.',
-  yellow: 'A mid-sized building project is planned for this location.',
-  green: 'A routine building permit has been issued for this location.',
+function formatCost(cost: number): string | null {
+  // NOTE(Agent): We check rounding boundaries carefully to avoid displaying
+  // "$1000K" when the cost is just under $1M. Values that round to >=1000K
+  // are promoted to the $XM format.
+  if (cost >= 1_000_000) {
+    const millions = cost / 1_000_000
+    return `$${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`
+  }
+  if (cost >= 100_000) {
+    const rounded = Math.round(cost / 1_000)
+    if (rounded >= 1000) return '$1M' // boundary: e.g. $999,500 → $1M not $1000K
+    return `$${rounded}K`
+  }
+  if (cost >= 1_000) {
+    return `$${(cost / 1_000).toFixed(0)}K`
+  }
+  return null // too small to be meaningful
+}
+
+// ── Project descriptor extraction ───────────────────────────────────────────
+
+// NOTE(Agent): These patterns extract a human-readable project type from the
+// work_description. We check them in order and return the first match. This
+// provides much richer community notes than a static "building project" label.
+// ⚠️  ORDER MATTERS — more specific patterns (e.g. "parking garage") must
+// appear BEFORE generic ones (e.g. "garage") to prevent incorrect matches.
+const PROJECT_DESCRIPTORS: { pattern: RegExp; label: string }[] = [
+  { pattern: /residential\s+tower/i, label: 'residential tower' },
+  { pattern: /(?:apartment|condo(?:minium)?|dwelling\s+unit)/i, label: 'residential building' },
+  { pattern: /(?:mixed[- ]use)/i, label: 'mixed-use development' },
+  { pattern: /(?:retail|shopping|storefront)/i, label: 'retail space' },
+  { pattern: /(?:office|commercial\s+building)/i, label: 'office building' },
+  { pattern: /(?:hotel|hospitality)/i, label: 'hotel' },
+  { pattern: /(?:school|educational)/i, label: 'educational facility' },
+  { pattern: /(?:medical|hospital|clinic|healthcare)/i, label: 'medical facility' },
+  { pattern: /(?:church|mosque|temple|religious)/i, label: 'religious facility' },
+  { pattern: /(?:restaurant|food\s+service|dining)/i, label: 'restaurant' },
+  { pattern: /(?:parking\s+(?:garage|structure|deck))/i, label: 'parking structure' },
+  { pattern: /(?:warehouse|distribution|fulfillment)/i, label: 'warehouse' },
+  { pattern: /(?:data\s+center)/i, label: 'data center' },
+  { pattern: /(?:factory|manufacturing|production)/i, label: 'manufacturing facility' },
+  { pattern: /(?:garage|shed|carport)/i, label: 'garage or outbuilding' },
+  { pattern: /(?:porch|deck|fence|driveway)/i, label: 'home improvement' },
+]
+
+function extractProjectDescriptor(desc: string, type: string): string | null {
+  const combined = `${type} ${desc}`
+  for (const { pattern, label } of PROJECT_DESCRIPTORS) {
+    if (pattern.test(combined)) return label
+  }
+  return null
+}
+
+// ── Dynamic lead sentence builder ───────────────────────────────────────────
+
+function buildLeadSentence(
+  severity: PermitSeverity,
+  type: string,
+  desc: string,
+  cost: number,
+): string {
+  const costStr = formatCost(cost)
+  const descriptor = extractProjectDescriptor(desc, type)
+  const isNewConstruction = type.includes('new construction') || type.includes('new building')
+
+  // Compose a rich lead combining cost + descriptor when available
+  if (severity === 'red') {
+    const what = descriptor || 'development'
+    if (costStr) {
+      return `A ${costStr} ${what} project is planned for this area.`
+    }
+    return `A large-scale ${what} project is planned for this area.`
+  }
+
+  if (severity === 'yellow') {
+    const what = descriptor || (isNewConstruction ? 'construction' : 'building')
+    if (costStr) {
+      return `A ${costStr} ${what} project is planned for this area.`
+    }
+    return `A notable ${what} project is planned for this area.`
+  }
+
+  // Green
+  if (descriptor) {
+    return `A permit for ${descriptor} work has been issued for this location.`
+  }
+  return 'A routine building permit has been issued for this location.'
 }
 
 // NOTE(Agent): We use a separate lead sentence for demolition/wrecking permits
@@ -144,7 +227,7 @@ export function classifyPermit(permit: {
     reason = 'Standard permit'
   }
 
-  const communityNote = buildCommunityNote(severity, type, desc)
+  const communityNote = buildCommunityNote(severity, type, desc, cost)
 
   return { severity, reason, communityNote }
 }
@@ -168,6 +251,7 @@ function buildCommunityNote(
   severity: PermitSeverity,
   type: string,
   desc: string,
+  cost: number,
 ): string {
   const matchedKeys = detectImpactCategories(type, desc)
 
@@ -181,7 +265,7 @@ function buildCommunityNote(
   } else if (isRenovation && severity === 'green') {
     lead = RENOVATION_LEAD
   } else {
-    lead = LEAD_SENTENCES[severity]
+    lead = buildLeadSentence(severity, type, desc, cost)
   }
 
   // Build impact fragments

@@ -227,7 +227,7 @@ function HomeContent() {
             </span>
           </div>
           <div className="flex-1 max-w-xl">
-            <SearchForm onSearch={handleSearch} isLoading={loading} />
+            <SearchForm onSearch={handleSearch} isLoading={loading} initialValue={search.address} />
           </div>
         </div>
       </header>

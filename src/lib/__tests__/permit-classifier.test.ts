@@ -62,7 +62,7 @@ describe('classifyPermit', () => {
             })
             expect(result.severity).toBe('yellow')
             expect(result.reason).toContain('$1M')
-            expect(result.communityNote).toContain('mid-sized')
+            expect(result.communityNote).toContain('$2.5M')
         })
 
         it('flags new construction at exact $1M threshold as yellow', () => {
@@ -106,7 +106,7 @@ describe('classifyPermit', () => {
                 reported_cost: 500_000,
             })
             expect(result.severity).toBe('green')
-            expect(result.communityNote).toContain('routine')
+            expect(result.communityNote).toContain('garage or outbuilding')
         })
 
         it('handles missing fields gracefully', () => {

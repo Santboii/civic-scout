@@ -34,12 +34,12 @@ export interface CityRegistry {
     dataset_id: string
     column_map: ColumnMap
     permit_type_filter: string | null
-    geo_type: 'point' | 'separate'
+    geo_type: 'point' | 'separate' | 'none'
     bbox: BoundingBox | null
     priority: number
     verified: boolean
     enabled: boolean
-    data_source_type: 'socrata' | 'arcgis'
+    data_source_type: 'socrata' | 'arcgis' | 'arcgis_no_geo'
     arcgis_url: string | null
 }
 
@@ -127,12 +127,12 @@ function mapRow(row: Record<string, unknown>): CityRegistry {
         dataset_id: row.dataset_id as string,
         column_map: row.column_map as ColumnMap,
         permit_type_filter: (row.permit_type_filter as string) ?? null,
-        geo_type: (row.geo_type as 'point' | 'separate') ?? 'point',
+        geo_type: (row.geo_type as 'point' | 'separate' | 'none') ?? 'point',
         bbox: (row.bbox as BoundingBox) ?? null,
         priority: (row.priority as number) ?? 0,
         verified: (row.verified as boolean) ?? false,
         enabled: (row.enabled as boolean) ?? true,
-        data_source_type: (row.data_source_type as 'socrata' | 'arcgis') ?? 'socrata',
+        data_source_type: (row.data_source_type as 'socrata' | 'arcgis' | 'arcgis_no_geo') ?? 'socrata',
         arcgis_url: (row.arcgis_url as string) ?? null,
     }
 }

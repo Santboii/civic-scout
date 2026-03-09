@@ -1,5 +1,5 @@
 import type { CityRegistry } from './city-registry'
-import { fetchPermitsFromArcGIS } from './arcgis'
+import { fetchPermitsFromArcGIS, fetchPermitsFromArcGISNoGeo } from './arcgis'
 
 const RADIUS_METERS = 8046 // ≈ 5 miles
 
@@ -15,6 +15,8 @@ export async function fetchPermitsForCity(
   switch (registry.data_source_type) {
     case 'arcgis':
       return fetchPermitsFromArcGIS(lat, lon, registry)
+    case 'arcgis_no_geo':
+      return fetchPermitsFromArcGISNoGeo(lat, lon, registry)
     case 'socrata':
     default:
       return fetchPermitsNearby(lat, lon, registry)
