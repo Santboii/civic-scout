@@ -34,6 +34,7 @@ function HomeContent() {
   const [unsupportedArea, setUnsupportedArea] = useState(false)
   const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
   const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
+  const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null)
 
   // NOTE(Agent): Severity order used for filtering — 'green' shows all,
   // 'yellow' shows yellow+red, 'red' shows only red.
@@ -235,7 +236,13 @@ function HomeContent() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
         <div className="flex-1 min-h-[50vh] lg:min-h-0 relative">
-          <Map permits={filteredPermits} center={mapCenter} onPermitSelect={setSelectedMapPermit} />
+          <Map
+            permits={filteredPermits}
+            center={mapCenter}
+            onPermitSelect={setSelectedMapPermit}
+            selectedPermitId={selectedPermitId}
+            onPermitDeselect={() => setSelectedPermitId(null)}
+          />
           {loading && (
             <div
               className="absolute inset-0 flex items-center justify-center z-20"
@@ -346,7 +353,18 @@ function HomeContent() {
               />
             )}
 
-            <PermitList permits={filteredPermits} />
+            <PermitList
+              permits={filteredPermits}
+              selectedPermitId={selectedPermitId}
+              onPermitClick={(permit) => {
+                // NOTE(Agent): Toggle behaviour — clicking the same card
+                // again deselects it. Map handles flyTo/popup via prop.
+                setSelectedPermitId((prev) =>
+                  prev === permit.id ? null : permit.id
+                )
+              }}
+              onViewDetails={(permit) => setSelectedMapPermit(permit)}
+            />
 
             {/* Data Attribution Footer */}
             <div className="mt-12 pt-8 border-t" style={{ borderTopColor: 'var(--border-strong)' }}>

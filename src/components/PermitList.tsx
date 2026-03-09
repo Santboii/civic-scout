@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
-import { AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react'
-import PermitDetailModal from './PermitDetailModal'
+import { AlertTriangle, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react'
 
 interface PermitListProps {
   permits: ClassifiedPermit[]
+  onPermitClick?: (permit: ClassifiedPermit) => void
+  onViewDetails?: (permit: ClassifiedPermit) => void
+  selectedPermitId?: string | null
 }
 
 const SEVERITY_CONFIG = {
@@ -33,9 +34,7 @@ const SEVERITY_CONFIG = {
   },
 }
 
-export default function PermitList({ permits }: PermitListProps) {
-  const [selectedPermit, setSelectedPermit] = useState<ClassifiedPermit | null>(null)
-
+export default function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }: PermitListProps) {
   if (permits.length === 0) {
     return (
       <div
@@ -58,83 +57,95 @@ export default function PermitList({ permits }: PermitListProps) {
   })
 
   return (
-    <>
-      <ul className="space-y-3">
-        {sorted.map((permit, index) => {
-          const config = SEVERITY_CONFIG[permit.severity]
-          const Icon = config.icon
-          return (
-            <li
-              key={permit.id}
-              className="glass-elevated rounded-xl p-4 transition-all cursor-pointer active:scale-[0.99] group relative overflow-hidden animate-fade-slide-up"
-              style={{
-                animationDelay: `${index * 50}ms`,
-              }}
-              onClick={() => setSelectedPermit(permit)}
-              onMouseEnter={(e) => {
+    <ul className="space-y-3">
+      {sorted.map((permit, index) => {
+        const config = SEVERITY_CONFIG[permit.severity]
+        const Icon = config.icon
+        const isSelected = permit.id === selectedPermitId
+        return (
+          <li
+            key={permit.id}
+            className="glass-elevated rounded-xl p-4 transition-all cursor-pointer active:scale-[0.99] group relative overflow-hidden animate-fade-slide-up"
+            style={{
+              animationDelay: `${index * 50}ms`,
+              // NOTE(Agent): Teal ring on the selected card to show which
+              // pin the map is currently focused on. Keeps severity accent
+              // bar intact for color-coded impact info.
+              boxShadow: isSelected
+                ? '0 0 0 2px var(--accent-primary), 0 4px 16px rgba(10, 158, 142, 0.12)'
+                : 'var(--shadow-sm)',
+              borderColor: isSelected ? 'rgba(10, 158, 142, 0.3)' : undefined,
+            }}
+            onClick={() => onPermitClick?.(permit)}
+            onMouseEnter={(e) => {
+              if (!isSelected) {
                 e.currentTarget.style.borderColor = 'rgba(10, 158, 142, 0.3)'
                 e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.08)'
-              }}
-              onMouseLeave={(e) => {
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSelected) {
                 e.currentTarget.style.borderColor = ''
                 e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-              }}
-            >
-              {/* Severity side accent */}
+              }
+            }}
+          >
+            {/* Severity side accent */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+              style={{ backgroundColor: config.color }}
+            />
+
+            <div className="flex items-start gap-3 pl-1">
               <div
-                className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
-                style={{ backgroundColor: config.color }}
-              />
-
-              <div className="flex items-start gap-3 pl-1">
-                <div
-                  className="p-2 rounded-lg shrink-0"
-                  style={{ backgroundColor: config.bg }}
-                >
-                  <Icon size={16} style={{ color: config.color }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p
-                      className="text-sm font-semibold truncate"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      {permit.address}
-                    </p>
-                    {permit.reported_cost > 0 && (
-                      <span
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
-                        style={{
-                          backgroundColor: 'rgba(200, 136, 10, 0.08)',
-                          color: 'var(--accent-warm)',
-                          border: '1px solid rgba(200, 136, 10, 0.15)',
-                        }}
-                      >
-                        ${(permit.reported_cost / 1e6).toFixed(1)}M
-                      </span>
-                    )}
-                  </div>
-
+                className="p-2 rounded-lg shrink-0"
+                style={{ backgroundColor: config.bg }}
+              >
+                <Icon size={16} style={{ color: config.color }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
                   <p
-                    className="text-[10px] font-semibold uppercase tracking-tight mt-1"
-                    style={{ color: 'var(--text-muted)' }}
+                    className="text-sm font-semibold truncate"
+                    style={{ color: 'var(--text-primary)' }}
                   >
-                    {permit.permit_type}
+                    {permit.address}
                   </p>
-
-                  {permit.community_note && (
-                    <p
-                      className="text-xs mt-2 line-clamp-2 leading-relaxed"
-                      style={{ color: 'var(--text-secondary)' }}
+                  {permit.reported_cost > 0 && (
+                    <span
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                      style={{
+                        backgroundColor: 'rgba(200, 136, 10, 0.08)',
+                        color: 'var(--accent-warm)',
+                        border: '1px solid rgba(200, 136, 10, 0.15)',
+                      }}
                     >
-                      {permit.community_note}
-                    </p>
+                      ${(permit.reported_cost / 1e6).toFixed(1)}M
+                    </span>
                   )}
+                </div>
 
-                  <div
-                    className="flex items-center gap-2 mt-3 pt-3 border-t"
-                    style={{ borderTopColor: 'var(--border-glass)' }}
+                <p
+                  className="text-[10px] font-semibold uppercase tracking-tight mt-1"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {permit.permit_type}
+                </p>
+
+                {permit.community_note && (
+                  <p
+                    className="text-xs mt-2 line-clamp-2 leading-relaxed"
+                    style={{ color: 'var(--text-secondary)' }}
                   >
+                    {permit.community_note}
+                  </p>
+                )}
+
+                <div
+                  className="flex items-center justify-between gap-2 mt-3 pt-3 border-t"
+                  style={{ borderTopColor: 'var(--border-glass)' }}
+                >
+                  <div className="flex items-center gap-2">
                     <span
                       className="text-[10px] font-bold uppercase tracking-widest"
                       style={{ color: config.color }}
@@ -152,19 +163,25 @@ export default function PermitList({ permits }: PermitListProps) {
                       {new Date(permit.issue_date).toLocaleDateString()}
                     </span>
                   </div>
+
+                  {/* View Details link — opens modal without triggering card click */}
+                  <button
+                    className="flex items-center gap-1 text-[10px] font-semibold transition-opacity hover:opacity-80"
+                    style={{ color: 'var(--accent-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onViewDetails?.(permit)
+                    }}
+                  >
+                    Details
+                    <ExternalLink size={10} />
+                  </button>
                 </div>
               </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      {selectedPermit && (
-        <PermitDetailModal
-          permit={selectedPermit}
-          onClose={() => setSelectedPermit(null)}
-        />
-      )}
-    </>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
