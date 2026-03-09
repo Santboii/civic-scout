@@ -19,6 +19,7 @@ export interface ColumnMap {
     latitude: string
     longitude: string
     location?: string       // Point-type column name (for within_circle)
+    full_address?: string   // Single-column address (for socrata_no_geo)
     street_number?: string
     street_direction?: string
     street_name?: string
@@ -39,7 +40,7 @@ export interface CityRegistry {
     priority: number
     verified: boolean
     enabled: boolean
-    data_source_type: 'socrata' | 'arcgis' | 'arcgis_no_geo'
+    data_source_type: 'socrata' | 'arcgis' | 'arcgis_no_geo' | 'socrata_no_geo'
     arcgis_url: string | null
 }
 
@@ -82,26 +83,33 @@ export async function getAllRegistries(): Promise<CityRegistry[]> {
 }
 
 /**
- * Find the best-matching city registry for a given lat/lon.
+ * Find ALL matching city registries for a given lat/lon.
  *
- * NOTE(Agent): When multiple bboxes overlap (e.g., a suburb inside a metro
- * area's generous bbox), the registry with the HIGHEST priority wins.
- * More specific/smaller cities should be given higher priority values.
+ * NOTE(Agent): Multiple bboxes can overlap (e.g., Cook County Suburbs + Chicago).
+ * Returns ALL matches sorted by priority DESC so the permits API can query
+ * each source and merge results. This replaced the old single-match approach
+ * to support overlapping coverage areas.
+ */
+export async function findAllCitiesByCoords(
+    lat: number,
+    lon: number
+): Promise<CityRegistry[]> {
+    const registries = await getAllRegistries()
+    return registries.filter(
+        (r) => r.bbox && isWithinBBox(lat, lon, r.bbox)
+    )
+}
+
+/**
+ * Find the best-matching (highest priority) city registry for a given lat/lon.
+ * Convenience wrapper — use findAllCitiesByCoords() when multi-source merge is needed.
  */
 export async function findCityByCoords(
     lat: number,
     lon: number
 ): Promise<CityRegistry | null> {
-    const registries = await getAllRegistries()
-
-    // Registries are already sorted by priority DESC from the query/cache
-    for (const registry of registries) {
-        if (registry.bbox && isWithinBBox(lat, lon, registry.bbox)) {
-            return registry
-        }
-    }
-
-    return null
+    const matches = await findAllCitiesByCoords(lat, lon)
+    return matches[0] ?? null
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -132,7 +140,7 @@ function mapRow(row: Record<string, unknown>): CityRegistry {
         priority: (row.priority as number) ?? 0,
         verified: (row.verified as boolean) ?? false,
         enabled: (row.enabled as boolean) ?? true,
-        data_source_type: (row.data_source_type as 'socrata' | 'arcgis' | 'arcgis_no_geo') ?? 'socrata',
+        data_source_type: (row.data_source_type as 'socrata' | 'arcgis' | 'arcgis_no_geo' | 'socrata_no_geo') ?? 'socrata',
         arcgis_url: (row.arcgis_url as string) ?? null,
     }
 }

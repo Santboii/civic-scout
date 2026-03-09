@@ -123,7 +123,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
               className="text-[10px] font-semibold uppercase tracking-widest"
               style={{ color: 'var(--text-muted)' }}
             >
-              {permit.permit_type}
+              {permit.permit_label}
             </span>
           </div>
           <button
@@ -313,6 +313,26 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
                   </p>
                   <p className="leading-relaxed" style={{ fontFamily: 'var(--font-body)' }}>
                     {permit.work_description || 'No detailed work description provided for this permit.'}
+                  </p>
+                </div>
+
+                {/* Raw Permit Type (from city database) */}
+                <div
+                  className="rounded-xl p-4 text-sm border"
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    borderColor: 'var(--border-glass)',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-widest mb-2"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Permit Type (Raw)
+                  </p>
+                  <p className="leading-relaxed font-medium" style={{ fontFamily: 'var(--font-body)' }}>
+                    {permit.permit_type || 'Not specified'}
                   </p>
                 </div>
               </div>
