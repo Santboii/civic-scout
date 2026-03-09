@@ -25,11 +25,15 @@
   /* Typography — deep navy to warm gray */
   --text-primary: #1A1D26;
   --text-secondary: #5C6370;
-  --text-muted: #9CA3AF;
+  --text-muted: #6B7280;
 
   /* Accent Colors — slightly deeper for WCAG on light */
   --accent-primary: #0A9E8E;
   --accent-primary-hover: #088577;
+  /* NOTE(Agent): --accent-text is a darker shade of the accent used on small
+     text (badges, labels) where --accent-primary fails the 4.5:1 WCAG AA ratio
+     on lightly-tinted glow backgrounds. Ratio of #077D70 on #F2FAF9 ≈ 5.0:1. */
+  --accent-text: #077D70;
   --accent-glow: rgba(10, 158, 142, 0.08);
   --accent-glow-strong: rgba(10, 158, 142, 0.15);
   --accent-warm: #C8880A;
@@ -86,6 +90,10 @@ body::before {
     radial-gradient(ellipse 80% 60% at 15% 20%, rgba(10, 158, 142, 0.02) 0%, transparent 60%),
     radial-gradient(ellipse 70% 50% at 85% 75%, rgba(200, 136, 10, 0.02) 0%, transparent 55%);
   pointer-events: none;
+  /* NOTE(Agent): contain:strict scopes layout/paint to this element so the browser
+     doesn't need to consider it when recalculating the rest of the page. */
+  contain: strict;
+  will-change: auto;
 }
 
 body::after {
@@ -98,6 +106,8 @@ body::after {
   background-repeat: repeat;
   background-size: 256px 256px;
   pointer-events: none;
+  contain: strict;
+  will-change: auto;
 }
 
 body {
@@ -136,6 +146,68 @@ h3 {
 p {
   color: var(--text-secondary);
   margin-bottom: var(--space-4);
+}
+
+/* === Accessibility Utilities === */
+
+/* NOTE(Agent): Visually hides content while keeping it accessible to screen readers.
+   Used for skip links (while not focused) and sr-only labels. WCAG 2.4.1, 1.3.1. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* NOTE(Agent): Skip link for WCAG 2.4.1 (bypass blocks). Hidden until focused by
+   keyboard navigation, at which point it slides into view at the top of the page. */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 16px;
+  z-index: 9999;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  background: var(--text-primary);
+  color: var(--background-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 16px;
+}
+
+/* NOTE(Agent): Global :focus-visible ensures every keyboard-focusable element
+   has a visible indicator. We use :focus-visible (not :focus) to avoid showing
+   the outline on mouse clicks, which would feel noisy for pointer users.
+   WCAG 2.4.7 — Focus Visible. */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* NOTE(Agent): Suppress motion for users who have opted into reduced motion in
+   their OS. Covers CSS animations, transitions, and smooth scroll globally.
+   WCAG 2.3.3 (AAA) / best practice for vestibular disorder users. */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Modern Button Base Styles */

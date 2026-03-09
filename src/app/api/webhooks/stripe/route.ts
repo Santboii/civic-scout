@@ -75,7 +75,11 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
         const status = sub.status === 'active' ? 'active' : sub.status === 'past_due' ? 'past_due' : 'canceled'
-        const periodEnd = new Date((sub as any).current_period_end * 1000).toISOString()
+        // NOTE(Agent): Stripe SDK 20.x typings omit current_period_end on Subscription directly.
+        // Casting through unknown with a minimal interface is safer than `as any`.
+        const periodEnd = new Date(
+          (sub as unknown as { current_period_end: number }).current_period_end * 1000
+        ).toISOString()
 
         await supabase
           .from('users')

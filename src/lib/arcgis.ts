@@ -57,7 +57,7 @@ export async function fetchPermitsFromArcGIS(
     })
 
     const url = `${registry.arcgis_url}/query?${params}`
-    console.log(`[arcgis] Fetching from ${registry.city}:`, url)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis] Fetching from ${registry.city}:`, url)
 
     const res = await fetch(url, {
         headers: { Accept: 'application/json' },
@@ -77,7 +77,7 @@ export async function fetchPermitsFromArcGIS(
         return []
     }
 
-    console.log(`[arcgis] ${registry.city} results:`, data.features.length)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis] ${registry.city} results:`, data.features.length)
 
     return data.features.map((f) => normalizeArcGISFeature(f, registry))
 }
@@ -114,7 +114,7 @@ export async function fetchPermitsFromArcGISNoGeo(
     })
 
     const url = `${registry.arcgis_url}/query?${params}`
-    console.log(`[arcgis-no-geo] Fetching from ${registry.city}:`, url)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis-no-geo] Fetching from ${registry.city}:`, url)
 
     const res = await fetch(url, {
         headers: { Accept: 'application/json' },
@@ -129,7 +129,7 @@ export async function fetchPermitsFromArcGISNoGeo(
 
     const data: ArcGISQueryResponse = await res.json()
     const features = data.features ?? []
-    console.log(`[arcgis-no-geo] ${registry.city} raw features:`, features.length)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis-no-geo] ${registry.city} raw features:`, features.length)
 
     if (features.length === 0) return []
 
@@ -175,7 +175,7 @@ export async function fetchPermitsFromArcGISNoGeo(
         }
     }
 
-    console.log(`[arcgis-no-geo] ${registry.city}: ${results.length} permits within radius (of ${features.length} fetched)`)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis-no-geo] ${registry.city}: ${results.length} permits within radius (of ${features.length} fetched)`)
     return results
 }
 

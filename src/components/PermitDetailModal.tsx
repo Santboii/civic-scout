@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useId } from 'react'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
 import { X, DollarSign, Calendar, MapPin, Info, ExternalLink, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
 
 interface PermitDetailModalProps {
   permit: ClassifiedPermit
   onClose: () => void
+  cityName?: string
 }
+
 
 const SEVERITY_CONFIG = {
   red: {
@@ -30,17 +32,51 @@ const SEVERITY_CONFIG = {
   },
 }
 
-export default function PermitDetailModal({ permit, onClose }: PermitDetailModalProps) {
+export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown City' }: PermitDetailModalProps) {
   const config = SEVERITY_CONFIG[permit.severity]
   const [showTechnical, setShowTechnical] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeBtnRef = useRef<HTMLButtonElement>(null)
+  const headingId = useId()
 
-  // Handle escape key
+  // NOTE(Agent): Combined focus trap + Escape handler using a single keydown
+  // listener on document. On mount, focus moves to the close button; on unmount,
+  // focus is restored to the element that triggered the modal. WCAG 2.4.3.
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    const previouslyFocused = document.activeElement as HTMLElement
+    closeBtnRef.current?.focus()
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
-    window.addEventListener('keydown', handleEsc)
-    return () => window.removeEventListener('keydown', handleEsc)
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previouslyFocused?.focus()
+    }
   }, [onClose])
 
   return (
@@ -48,8 +84,15 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 transition-opacity"
       style={{ backgroundColor: 'var(--backdrop-overlay)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
+      aria-hidden="true"
     >
+      {/* NOTE(Agent): role="dialog" + aria-modal + aria-labelledby implement the
+          ARIA dialog pattern for screen readers. WCAG 4.1.2. */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
         className="rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] animate-fade-slide-up"
         style={{
           backgroundColor: 'var(--background-card)',
@@ -84,11 +127,13 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
             </span>
           </div>
           <button
+            ref={closeBtnRef}
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-2 hover:bg-black/5 rounded-full transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -97,6 +142,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
           {/* Address & Title */}
           <section>
             <h2
+              id={headingId}
               className="text-2xl leading-tight tracking-tight"
               style={{
                 color: 'var(--text-primary)',
@@ -107,11 +153,11 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
               {permit.address}
             </h2>
             <div className="flex items-center gap-2 mt-2 text-sm font-medium">
-              <MapPin size={14} style={{ color: 'var(--text-muted)' }} />
-              <span style={{ color: 'var(--text-secondary)' }}>Chicago, Illinois</span>
+              <MapPin size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+              <span style={{ color: 'var(--text-secondary)' }}>{cityName}</span>
               {permit.zoning_classification && (
                 <>
-                  <span style={{ color: 'var(--text-muted)' }}>•</span>
+                  <span style={{ color: 'var(--text-muted)' }} aria-hidden="true">•</span>
                   <span
                     className="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                     style={{
@@ -137,7 +183,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
               }}
             >
               <div className="flex items-center gap-2 mb-1">
-                <DollarSign size={14} style={{ color: 'var(--text-muted)' }} />
+                <DollarSign size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
                 <span
                   className="text-[10px] font-semibold uppercase tracking-wider"
                   style={{ color: 'var(--text-muted)' }}
@@ -164,7 +210,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
               }}
             >
               <div className="flex items-center gap-2 mb-1">
-                <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
+                <Calendar size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
                 <span
                   className="text-[10px] font-semibold uppercase tracking-wider"
                   style={{ color: 'var(--text-muted)' }}
@@ -194,7 +240,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
               className="p-2 rounded-lg shrink-0"
               style={{ backgroundColor: 'rgba(0, 0, 0, 0.03)' }}
             >
-              <MessageCircle size={20} style={{ color: config.color }} />
+              <MessageCircle size={20} style={{ color: config.color }} aria-hidden="true" />
             </div>
             <div>
               <p
@@ -213,6 +259,8 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
           <section>
             <button
               onClick={() => setShowTechnical(!showTechnical)}
+              aria-expanded={showTechnical}
+              aria-controls="technical-details-panel"
               className="flex items-center gap-2 w-full text-left group"
             >
               <h3
@@ -222,12 +270,12 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
                 Technical Details
               </h3>
               {showTechnical
-                ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} />
-                : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+                ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
               }
             </button>
             {showTechnical && (
-              <div className="mt-4 space-y-4 animate-fade-slide-up">
+              <div id="technical-details-panel" className="mt-4 space-y-4 animate-fade-slide-up">
                 {/* Impact Analysis (technical reason) */}
                 <div
                   className="rounded-xl p-4 text-sm border"
@@ -240,7 +288,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
                     className="text-[10px] font-semibold uppercase tracking-widest mb-2"
                     style={{ color: 'var(--text-muted)' }}
                   >
-                    <Info size={12} className="inline mr-1" style={{ verticalAlign: 'middle' }} />
+                    <Info size={12} className="inline mr-1" aria-hidden="true" style={{ verticalAlign: 'middle' }} />
                     Classification Reason
                   </p>
                   <p className="font-medium leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
@@ -294,7 +342,7 @@ export default function PermitDetailModal({ permit, onClose }: PermitDetailModal
             }}
           >
             View Full Data Source
-            <ExternalLink size={16} />
+            <ExternalLink size={16} aria-hidden="true" />
           </a>
           <p
             className="text-center text-[10px] mt-4 uppercase tracking-wider font-semibold"

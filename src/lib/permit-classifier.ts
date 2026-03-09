@@ -6,6 +6,7 @@ export interface ClassifiedPermit {
   lat: number
   lon: number
   permit_type: string
+  permit_label: string
   work_description: string
   reported_cost: number
   issue_date: string
@@ -118,12 +119,16 @@ function formatCost(cost: number): string | null {
 // appear BEFORE generic ones (e.g. "garage") to prevent incorrect matches.
 const PROJECT_DESCRIPTORS: { pattern: RegExp; label: string }[] = [
   { pattern: /residential\s+tower/i, label: 'residential tower' },
+  { pattern: /(?:townhouse|townhome|rowhouse|row\s+house)/i, label: 'townhouse' },
   { pattern: /(?:apartment|condo(?:minium)?|dwelling\s+unit)/i, label: 'residential building' },
+  { pattern: /(?:senior\s+living|assisted\s+living|nursing)/i, label: 'senior living facility' },
   { pattern: /(?:mixed[- ]use)/i, label: 'mixed-use development' },
   { pattern: /(?:retail|shopping|storefront)/i, label: 'retail space' },
   { pattern: /(?:office|commercial\s+building)/i, label: 'office building' },
   { pattern: /(?:hotel|hospitality)/i, label: 'hotel' },
   { pattern: /(?:school|educational)/i, label: 'educational facility' },
+  { pattern: /(?:daycare|childcare|child\s+care)/i, label: 'daycare' },
+  { pattern: /(?:library|community\s+center)/i, label: 'community facility' },
   { pattern: /(?:medical|hospital|clinic|healthcare)/i, label: 'medical facility' },
   { pattern: /(?:church|mosque|temple|religious)/i, label: 'religious facility' },
   { pattern: /(?:restaurant|food\s+service|dining)/i, label: 'restaurant' },
@@ -131,8 +136,12 @@ const PROJECT_DESCRIPTORS: { pattern: RegExp; label: string }[] = [
   { pattern: /(?:warehouse|distribution|fulfillment)/i, label: 'warehouse' },
   { pattern: /(?:data\s+center)/i, label: 'data center' },
   { pattern: /(?:factory|manufacturing|production)/i, label: 'manufacturing facility' },
+  { pattern: /(?:solar|wind\s+(?:farm|turbine)|battery\s+storage)/i, label: 'energy installation' },
+  { pattern: /(?:telecom|cell\s+tower|antenna)/i, label: 'telecommunications' },
+  { pattern: /(?:car\s+wash)/i, label: 'car wash' },
+  { pattern: /(?:gas\s+station|fueling)/i, label: 'gas station' },
   { pattern: /(?:garage|shed|carport)/i, label: 'garage or outbuilding' },
-  { pattern: /(?:porch|deck|fence|driveway)/i, label: 'home improvement' },
+  { pattern: /(?:porch|deck|fence|driveway|roof|window|siding|gutter)/i, label: 'home improvement' },
 ]
 
 function extractProjectDescriptor(desc: string, type: string): string | null {
@@ -185,13 +194,40 @@ function buildLeadSentence(
 const DEMOLITION_LEAD = 'An existing structure at this location is scheduled for demolition.'
 const RENOVATION_LEAD = 'Renovation or alteration work is planned for this location.'
 
+// ── Permit label helpers ────────────────────────────────────────────────────
+
+// NOTE(Agent): Title-cases a descriptor label for user-facing display.
+// e.g. "residential building" → "Residential Building"
+function titleCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// NOTE(Agent): Derives a human-friendly label for what the permit is for.
+// First tries to match the work_description against PROJECT_DESCRIPTORS.
+// Falls back to interpreting the raw permit_type string.
+function derivePermitLabel(type: string, desc: string): string {
+  const descriptor = extractProjectDescriptor(desc, type)
+  if (descriptor) return titleCase(descriptor)
+
+  // Fallback: derive from raw permit_type
+  if (type.includes('wrecking') || type.includes('demolition')) return 'Demolition'
+  if (type.includes('new construction') || type.includes('new building')) return 'New Construction'
+  if (type.includes('renovation') || type.includes('alteration')) return 'Renovation'
+  if (type.includes('electric') || type.includes('electrical')) return 'Electrical Work'
+  if (type.includes('plumbing')) return 'Plumbing Work'
+  if (type.includes('mechanical') || type.includes('hvac')) return 'Mechanical Work'
+  if (type.includes('sign')) return 'Sign Permit'
+
+  return 'Building Permit'
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function classifyPermit(permit: {
   permit_type?: string
   work_description?: string
   reported_cost?: number | string
-}): { severity: PermitSeverity; reason: string; communityNote: string } {
+}): { severity: PermitSeverity; reason: string; communityNote: string; permitLabel: string } {
   const cost = Number(permit.reported_cost) || 0
   const desc = (permit.work_description ?? '').toLowerCase()
   const type = (permit.permit_type ?? '').toLowerCase()
@@ -228,8 +264,9 @@ export function classifyPermit(permit: {
   }
 
   const communityNote = buildCommunityNote(severity, type, desc, cost)
+  const permitLabel = derivePermitLabel(type, desc)
 
-  return { severity, reason, communityNote }
+  return { severity, reason, communityNote, permitLabel }
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────

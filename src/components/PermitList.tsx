@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, memo } from 'react'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
 import { AlertTriangle, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react'
 
@@ -34,7 +35,23 @@ const SEVERITY_CONFIG = {
   },
 }
 
-export default function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }: PermitListProps) {
+// NOTE(Agent): Memoized to prevent re-renders from unrelated parent state changes
+// (e.g., loading, showPayment, selectedMapPermit) that don't affect list props.
+export default memo(PermitList)
+
+function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }: PermitListProps) {
+  // NOTE(Agent): useMemo must be called unconditionally before any early returns to comply with
+  // Rules of Hooks. When permits is empty the sorted array is also empty, which is fine.
+  const sorted = useMemo(() => {
+    const order = { red: 0, yellow: 1, green: 2 }
+    return [...permits]
+      .sort((a, b) => order[a.severity] - order[b.severity])
+      .map((p) => ({
+        ...p,
+        _formattedDate: new Date(p.issue_date).toLocaleDateString(),
+      }))
+  }, [permits])
+
   if (permits.length === 0) {
     return (
       <div
@@ -51,11 +68,6 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
     )
   }
 
-  const sorted = [...permits].sort((a, b) => {
-    const order = { red: 0, yellow: 1, green: 2 }
-    return order[a.severity] - order[b.severity]
-  })
-
   return (
     <ul className="space-y-3">
       {sorted.map((permit, index) => {
@@ -66,6 +78,9 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
           <li
             key={permit.id}
             className="glass-elevated rounded-xl p-4 transition-all cursor-pointer active:scale-[0.99] group relative overflow-hidden animate-fade-slide-up"
+            tabIndex={0}
+            role="article"
+            aria-label={`${config.label} permit at ${permit.address}`}
             style={{
               animationDelay: `${index * 50}ms`,
               // NOTE(Agent): Teal ring on the selected card to show which
@@ -77,6 +92,15 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
               borderColor: isSelected ? 'rgba(10, 158, 142, 0.3)' : undefined,
             }}
             onClick={() => onPermitClick?.(permit)}
+            // NOTE(Agent): onKeyDown handles keyboard activation (Enter/Space) for
+            // the <li> card. Required because <li> is not natively interactive.
+            // WCAG 2.1.1 — Keyboard Accessible.
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onPermitClick?.(permit)
+              }
+            }}
             onMouseEnter={(e) => {
               if (!isSelected) {
                 e.currentTarget.style.borderColor = 'rgba(10, 158, 142, 0.3)'
@@ -101,7 +125,7 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
                 className="p-2 rounded-lg shrink-0"
                 style={{ backgroundColor: config.bg }}
               >
-                <Icon size={16} style={{ color: config.color }} />
+                <Icon size={16} style={{ color: config.color }} aria-hidden="true" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
@@ -129,7 +153,7 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
                   className="text-[10px] font-semibold uppercase tracking-tight mt-1"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  {permit.permit_type}
+                  {permit.permit_label}
                 </p>
 
                 {permit.community_note && (
@@ -160,13 +184,14 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
                       className="text-[10px] font-medium"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      {new Date(permit.issue_date).toLocaleDateString()}
+                      {permit._formattedDate}
                     </span>
                   </div>
 
                   {/* View Details link — opens modal without triggering card click */}
                   <button
                     className="flex items-center gap-1 text-[10px] font-semibold transition-opacity hover:opacity-80"
+                    aria-label={`View details for permit at ${permit.address}`}
                     style={{ color: 'var(--accent-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -174,7 +199,7 @@ export default function PermitList({ permits, onPermitClick, onViewDetails, sele
                     }}
                   >
                     Details
-                    <ExternalLink size={10} />
+                    <ExternalLink size={10} aria-hidden="true" />
                   </button>
                 </div>
               </div>

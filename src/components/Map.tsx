@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
@@ -26,11 +26,18 @@ const TEXT_PRIMARY = '#1A1D26'
 const TEXT_SECONDARY = '#5C6370'
 const TEXT_MUTED = '#9CA3AF'
 
-export default function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect }: MapProps) {
+// NOTE(Agent): Exported as memo'd component to prevent re-renders from unrelated
+// parent state (selectedMapPermit, loading, showPayment, etc.).
+export default memo(Map)
+
+function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<globalThis.Map<string, L.Marker>>(new globalThis.Map())
   const circleRef = useRef<L.Circle | null>(null)
+  // NOTE(Agent): Track the previously-selected ID so the lightweight selection effect
+  // can restore the old marker's icon without rebuilding all markers.
+  const prevSelectedIdRef = useRef<string | null>(null)
   // NOTE(Agent): Track whether the popupclose was triggered programmatically
   // (e.g. when opening a different marker's popup) vs. by user interaction.
   // Prevents spurious deselect calls during marker switches.
@@ -39,11 +46,16 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return
 
-    delete (L.Icon.Default.prototype as any)._getIconUrl
+    // NOTE(Agent): Leaflet's _getIconUrl is a private property not in the type defs.
+    // We cast through unknown first to satisfy strict TypeScript overlap checking.
+    // NOTE(Agent): Self-host Leaflet marker images from /public/leaflet/ to avoid
+    // unpkg.com cross-origin latency and reliability risk. Images copied from
+    // node_modules/leaflet/dist/images/ during the performance audit (Mar 2026).
+    delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)['_getIconUrl']
     L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconRetinaUrl: '/leaflet/marker-icon-2x.png',
+      iconUrl: '/leaflet/marker-icon.png',
+      shadowUrl: '/leaflet/marker-shadow.png',
     })
 
     mapRef.current = L.map(mapContainer.current, {
@@ -87,6 +99,10 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
     })
   }, [])
 
+  // NOTE(Agent): Marker-build effect — rebuilds ALL markers only when the permits
+  // list or center changes. selectedPermitId is intentionally NOT in the dep array
+  // here; icon swaps for selection are handled by the lightweight effect below.
+  // This prevents the expensive full-rebuild when a sidebar card is clicked.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -130,11 +146,11 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
       interactive: false,
     }).addTo(map)
 
-    // Permit markers
+    // Permit markers — all rendered with unselected icon initially.
+    // The selection-style effect below will apply the selected icon.
     permits.forEach((permit) => {
       const color = SEVERITY_COLORS[permit.severity] ?? '#9CA3AF'
-      const isSelected = permit.id === selectedPermitId
-      const permitIcon = createPermitIcon(color, isSelected)
+      const permitIcon = createPermitIcon(color, false)
 
       const popupContent = `
         <div style="padding:12px;font-family:system-ui;min-width:200px;color:${TEXT_PRIMARY}">
@@ -159,13 +175,15 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
 
       // NOTE(Agent): Leaflet popups are raw HTML, so we attach a native click listener
       // to the "View Details" button after the popup opens to bridge into React state.
+      // { once: true } auto-removes the listener after first invocation, preventing
+      // stacked handlers if the same marker popup is opened multiple times.
       marker.on('popupopen', () => {
         const popupEl = marker.getPopup()?.getElement()
         const btn = popupEl?.querySelector(`[data-permit-id="${permit.id}"]`)
         btn?.addEventListener('click', () => {
           onPermitSelect?.(permit)
           marker.closePopup()
-        })
+        }, { once: true })
       })
 
       markersRef.current.set(permit.id, marker)
@@ -180,10 +198,55 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
     }
     map.on('popupclose', handlePopupClose)
 
+    // After rebuilding, re-apply selected icon if one is currently selected
+    if (selectedPermitId) {
+      const marker = markersRef.current.get(selectedPermitId)
+      if (marker) {
+        const permit = permits.find((p) => p.id === selectedPermitId)
+        if (permit) {
+          const color = SEVERITY_COLORS[permit.severity] ?? '#9CA3AF'
+          marker.setIcon(createPermitIcon(color, true))
+        }
+      }
+    }
+    prevSelectedIdRef.current = selectedPermitId ?? null
+
     return () => {
       map.off('popupclose', handlePopupClose)
     }
-  }, [permits, center, selectedPermitId, createPermitIcon, onPermitSelect, onPermitDeselect])
+    // NOTE(Agent): selectedPermitId deliberately excluded — icon selection is
+    // handled by the lightweight effect below to avoid full marker rebuilds.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permits, center, createPermitIcon, onPermitSelect, onPermitDeselect])
+
+  // NOTE(Agent): Lightweight selection-icon effect — only swaps icons for the
+  // previously-selected and newly-selected markers. Does NOT rebuild anything else.
+  // This fires when a sidebar card is clicked, keeping INP low.
+  useEffect(() => {
+    const prevId = prevSelectedIdRef.current
+
+    // Restore old marker to unselected icon
+    if (prevId && prevId !== selectedPermitId) {
+      const prevMarker = markersRef.current.get(prevId)
+      const prevPermit = permits.find((p) => p.id === prevId)
+      if (prevMarker && prevPermit) {
+        const color = SEVERITY_COLORS[prevPermit.severity] ?? '#9CA3AF'
+        prevMarker.setIcon(createPermitIcon(color, false))
+      }
+    }
+
+    // Apply selected icon to new marker
+    if (selectedPermitId) {
+      const nextMarker = markersRef.current.get(selectedPermitId)
+      const nextPermit = permits.find((p) => p.id === selectedPermitId)
+      if (nextMarker && nextPermit) {
+        const color = SEVERITY_COLORS[nextPermit.severity] ?? '#9CA3AF'
+        nextMarker.setIcon(createPermitIcon(color, true))
+      }
+    }
+
+    prevSelectedIdRef.current = selectedPermitId ?? null
+  }, [selectedPermitId, permits, createPermitIcon])
 
   // NOTE(Agent): Separate effect to handle flyTo + popup open when a card is selected
   // from the sidebar. Reads from the markersRef which is populated by the effect above.
@@ -214,18 +277,38 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
   }, [selectedPermitId])
 
   return (
-    <div className="w-full h-full relative z-0 min-h-[400px]" style={{ backgroundColor: 'var(--background-primary)' }}>
-      <div ref={mapContainer} className="w-full h-full" style={{ height: '100%', width: '100%' }} />
+    <div
+      className="w-full h-full relative z-0 min-h-[400px]"
+      style={{ backgroundColor: 'var(--background-primary)' }}
+    >
+      {/* NOTE(Agent): role="application" signals to screen readers that this is an
+          interactive region with custom keyboard behaviour (Leaflet handles its own
+          keyboard bindings). aria-label provides the accessible name. */}
+      <div
+        ref={mapContainer}
+        className="w-full h-full"
+        role="application"
+        aria-label="Interactive map showing building permit locations"
+        style={{ height: '100%', width: '100%' }}
+      />
 
       {/* Map Legend — Light glass */}
-      <div className="glass absolute bottom-6 right-6 z-10 p-4 rounded-xl hidden sm:block">
+      <div
+        className="glass absolute bottom-6 right-6 z-10 p-4 rounded-xl hidden sm:block"
+        role="region"
+        aria-label="Map legend"
+      >
         <p className="text-[9px] font-semibold uppercase tracking-[0.25em] mb-3" style={{ color: 'var(--text-muted)' }}>
           Legend
         </p>
         <div className="space-y-2.5">
           {(['red', 'yellow', 'green'] as const).map((severity) => (
             <div key={severity} className="flex items-center gap-2.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[severity], boxShadow: `0 1px 4px ${SEVERITY_COLORS[severity]}33` }} />
+              <div
+                className="w-2.5 h-2.5 rounded-full"
+                aria-hidden="true"
+                style={{ backgroundColor: SEVERITY_COLORS[severity], boxShadow: `0 1px 4px ${SEVERITY_COLORS[severity]}33` }}
+              />
               <span className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
                 {severity === 'red' ? 'High Impact' : severity === 'yellow' ? 'Medium Impact' : 'Standard'}
               </span>
@@ -233,7 +316,11 @@ export default function Map({ permits, center, onPermitSelect, selectedPermitId,
           ))}
           <div className="pt-2 border-t mt-2" style={{ borderColor: 'var(--border-glass)' }}>
             <div className="flex items-center gap-2.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ACCENT_TEAL, boxShadow: `0 1px 4px ${ACCENT_TEAL}44` }} />
+              <div
+                className="w-2.5 h-2.5 rounded-full"
+                aria-hidden="true"
+                style={{ backgroundColor: ACCENT_TEAL, boxShadow: `0 1px 4px ${ACCENT_TEAL}44` }}
+              />
               <span className="text-[11px] font-medium" style={{ color: ACCENT_TEAL }}>Search Center</span>
             </div>
           </div>

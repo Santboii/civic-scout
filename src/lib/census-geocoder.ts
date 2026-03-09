@@ -115,12 +115,12 @@ async function geocodeViaCensus(address: string): Promise<GeocodeResult> {
         const matches = data.result?.addressMatches ?? []
 
         if (matches.length === 0) {
-            console.log(`[census-geocoder] No match for: ${address}`)
+            if (process.env.NODE_ENV !== 'production') console.log(`[census-geocoder] No match for: ${address}`)
             return { lat: null, lon: null }
         }
 
         const { coordinates } = matches[0]
-        console.log(`[census-geocoder] Hit: ${address} → (${coordinates.y}, ${coordinates.x})`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[census-geocoder] Hit: ${address} → (${coordinates.y}, ${coordinates.x})`)
         return { lat: coordinates.y, lon: coordinates.x }
     } catch (err) {
         console.warn(`[census-geocoder] Error for ${address}:`, err)
@@ -157,12 +157,12 @@ async function geocodeViaMapbox(address: string): Promise<GeocodeResult> {
 
         const coords = data.features?.[0]?.geometry?.coordinates
         if (!coords) {
-            console.log(`[mapbox-geocoder] No match for: ${address}`)
+            if (process.env.NODE_ENV !== 'production') console.log(`[mapbox-geocoder] No match for: ${address}`)
             return { lat: null, lon: null }
         }
 
         // Mapbox returns [lon, lat]
-        console.log(`[mapbox-geocoder] Hit: ${address} → (${coords[1]}, ${coords[0]})`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[mapbox-geocoder] Hit: ${address} → (${coords[1]}, ${coords[0]})`)
         return { lat: coords[1], lon: coords[0] }
     } catch (err) {
         console.warn(`[mapbox-geocoder] Error for ${address}:`, err)

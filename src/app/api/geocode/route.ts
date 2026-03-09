@@ -62,5 +62,14 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  return NextResponse.json({ results })
+  // NOTE(Agent): Geocode results are location-stable — cache 60s in browser,
+  // allow CDN edge to serve stale for 10 min. Public because requests are unauthenticated.
+  return NextResponse.json(
+    { results },
+    {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+      },
+    }
+  )
 }

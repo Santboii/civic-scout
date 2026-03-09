@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import type { PermitSeverity } from '@/lib/permit-classifier'
 
 interface SeverityFilterProps {
@@ -14,7 +15,7 @@ const STOPS: { severity: PermitSeverity; label: string; color: string }[] = [
     { severity: 'red', label: 'High', color: 'var(--status-red)' },
 ]
 
-export default function SeverityFilter({ value, onChange, counts }: SeverityFilterProps) {
+function SeverityFilter({ value, onChange, counts }: SeverityFilterProps) {
     const activeIndex = STOPS.findIndex((s) => s.severity === value)
 
     // Count of permits currently shown at each threshold
@@ -37,11 +38,13 @@ export default function SeverityFilter({ value, onChange, counts }: SeverityFilt
                 <span
                     className="text-[9px] font-semibold uppercase tracking-[0.2em]"
                     style={{ color: 'var(--text-muted)' }}
+                    id="severity-filter-label"
                 >
                     Impact Filter
                 </span>
                 <span
                     className="text-[10px] font-semibold tabular-nums"
+                    aria-live="polite"
                     style={{ color: 'var(--text-secondary)' }}
                 >
                     {visibleCount(value)} shown
@@ -69,7 +72,14 @@ export default function SeverityFilter({ value, onChange, counts }: SeverityFilt
                 />
 
                 {/* Stop buttons */}
-                <div className="absolute inset-0 flex items-center justify-between">
+                {/* NOTE(Agent): role="radiogroup" + role="radio" + aria-checked implement the
+                    ARIA radio button pattern so screen readers announce the active severity
+                    threshold and its change. WCAG 4.1.2 — Name, Role, Value. */}
+                <div
+                    className="absolute inset-0 flex items-center justify-between"
+                    role="radiogroup"
+                    aria-labelledby="severity-filter-label"
+                >
                     {STOPS.map((stop, i) => {
                         const isActive = i <= activeIndex
                         const isSelected = i === activeIndex
@@ -77,15 +87,17 @@ export default function SeverityFilter({ value, onChange, counts }: SeverityFilt
                             <button
                                 key={stop.severity}
                                 type="button"
+                                role="radio"
+                                aria-checked={isSelected}
                                 onClick={() => onChange(stop.severity)}
                                 className="relative group flex flex-col items-center"
-                                style={{ outline: 'none' }}
                                 aria-label={`Filter: ${stop.label}`}
                             >
                                 {/* Glow ring on selected */}
                                 {isSelected && (
                                     <div
                                         className="absolute rounded-full animate-pulse"
+                                        aria-hidden="true"
                                         style={{
                                             width: 32,
                                             height: 32,
@@ -99,6 +111,7 @@ export default function SeverityFilter({ value, onChange, counts }: SeverityFilt
                                 {/* Dot */}
                                 <div
                                     className="relative z-10 rounded-full transition-all duration-200 ease-out"
+                                    aria-hidden="true"
                                     style={{
                                         width: isSelected ? 22 : 14,
                                         height: isSelected ? 22 : 14,
@@ -143,3 +156,7 @@ export default function SeverityFilter({ value, onChange, counts }: SeverityFilt
         </div>
     )
 }
+
+// NOTE(Agent): Memoized to prevent re-renders when parent state changes
+// (e.g., selectedPermitId, loading) don't affect filter props.
+export default memo(SeverityFilter)

@@ -98,7 +98,7 @@ export async function fetchPermitsNearby(
   })
 
   const url = `${base}?${params}`
-  console.log(`[socrata] Fetching from ${registry.city}:`, url)
+  if (process.env.NODE_ENV !== 'production') console.log(`[socrata] Fetching from ${registry.city}:`, url)
 
   const res = await fetch(url, {
     headers: {
@@ -115,7 +115,7 @@ export async function fetchPermitsNearby(
   }
 
   const data: RawPermitRow[] = await res.json()
-  console.log(`[socrata] ${registry.city} results:`, data.length)
+  if (process.env.NODE_ENV !== 'production') console.log(`[socrata] ${registry.city} results:`, data.length)
 
   // Normalize using the city's column_map
   return data.map((row) => normalizeRow(row, registry))

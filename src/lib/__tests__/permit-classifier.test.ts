@@ -255,4 +255,83 @@ describe('classifyPermit', () => {
             expect(result.communityNote).toContain('dust')
         })
     })
+
+    describe('permitLabel', () => {
+        it('returns descriptor-based label for residential tower', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'Build new residential tower',
+                reported_cost: 6_000_000,
+            })
+            expect(result.permitLabel).toBe('Residential Tower')
+        })
+
+        it('returns descriptor-based label for restaurant', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'New restaurant and dining area',
+                reported_cost: 500_000,
+            })
+            expect(result.permitLabel).toBe('Restaurant')
+        })
+
+        it('returns descriptor-based label for garage', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'Build new garage',
+                reported_cost: 50_000,
+            })
+            expect(result.permitLabel).toBe('Garage Or Outbuilding')
+        })
+
+        it('falls back to Demolition for wrecking permits', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - WRECKING/DEMOLITION',
+                work_description: 'Full teardown',
+                reported_cost: 100_000,
+            })
+            expect(result.permitLabel).toBe('Demolition')
+        })
+
+        it('falls back to Renovation for alteration permits', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - RENOVATION/ALTERATION',
+                work_description: 'Replace windows and doors',
+                reported_cost: 50_000,
+            })
+            expect(result.permitLabel).toBe('Home Improvement')
+        })
+
+        it('falls back to New Construction when no descriptor matches', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'New building',
+                reported_cost: 1_000_000,
+            })
+            expect(result.permitLabel).toBe('New Construction')
+        })
+
+        it('returns Building Permit for empty input', () => {
+            const result = classifyPermit({})
+            expect(result.permitLabel).toBe('Building Permit')
+        })
+
+        it('detects townhouse descriptor', () => {
+            const result = classifyPermit({
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'New 4-unit townhouse development',
+                reported_cost: 2_000_000,
+            })
+            expect(result.permitLabel).toBe('Townhouse')
+        })
+
+        it('detects home improvement from roof keyword', () => {
+            const result = classifyPermit({
+                permit_type: 'Residential Alteration',
+                work_description: 'Reroof entire house with new shingles',
+                reported_cost: 15_000,
+            })
+            expect(result.permitLabel).toBe('Home Improvement')
+        })
+    })
 })

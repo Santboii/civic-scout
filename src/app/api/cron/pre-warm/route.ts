@@ -66,7 +66,7 @@ async function transformPermit(
 ): Promise<ClassifiedPermit> {
   const lat = parseFloat(p.latitude ?? '0')
   const lon = parseFloat(p.longitude ?? '0')
-  const { severity, reason, communityNote } = classifyPermit({
+  const { severity, reason, communityNote, permitLabel } = classifyPermit({
     permit_type: p.permit_type,
     work_description: p.work_description,
     reported_cost: p.reported_cost,
@@ -85,6 +85,7 @@ async function transformPermit(
     lat,
     lon,
     permit_type: p.permit_type ?? '',
+    permit_label: permitLabel,
     work_description: p.work_description ?? '',
     reported_cost: Number(p.reported_cost) || 0,
     issue_date: p.issue_date ?? '',
