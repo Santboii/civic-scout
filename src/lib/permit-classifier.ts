@@ -166,9 +166,9 @@ function buildLeadSentence(
   type: string,
   desc: string,
   cost: number,
+  descriptor: string | null,
 ): string {
   const costStr = formatCost(cost)
-  const descriptor = extractProjectDescriptor(desc, type)
   const isNewConstruction = type.includes('new construction') || type.includes('new building')
 
   // Compose a rich lead combining cost + descriptor when available
@@ -209,11 +209,9 @@ function titleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-// NOTE(Agent): Derives a human-friendly label for what the permit is for.
-// First tries to match the work_description against PROJECT_DESCRIPTORS.
-// Falls back to interpreting the raw permit_type string.
-function derivePermitLabel(type: string, desc: string): string {
-  const descriptor = extractProjectDescriptor(desc, type)
+// NOTE(Agent): P2-7 from backend perf audit. Accepts pre-computed descriptor
+// to avoid calling extractProjectDescriptor a second time.
+function derivePermitLabel(type: string, desc: string, descriptor: string | null): string {
   if (descriptor) return titleCase(descriptor)
 
   // Fallback: derive from raw permit_type
@@ -279,8 +277,11 @@ export function classifyPermit(permit: {
     reason = 'Standard permit'
   }
 
-  const communityNote = buildCommunityNote(severity, type, desc, cost)
-  const permitLabel = derivePermitLabel(type, desc)
+  // NOTE(Agent): P2-7 from backend perf audit. Compute descriptor once,
+  // thread through both buildCommunityNote and derivePermitLabel.
+  const descriptor = extractProjectDescriptor(desc, type)
+  const communityNote = buildCommunityNote(severity, type, desc, cost, descriptor)
+  const permitLabel = derivePermitLabel(type, desc, descriptor)
 
   return { severity, reason, communityNote, permitLabel }
 }
@@ -305,6 +306,7 @@ function buildCommunityNote(
   type: string,
   desc: string,
   cost: number,
+  descriptor: string | null,
 ): string {
   const matchedKeys = detectImpactCategories(type, desc)
 
@@ -318,7 +320,7 @@ function buildCommunityNote(
   } else if (isRenovation && severity === 'green') {
     lead = RENOVATION_LEAD
   } else {
-    lead = buildLeadSentence(severity, type, desc, cost)
+    lead = buildLeadSentence(severity, type, desc, cost, descriptor)
   }
 
   // Build impact fragments

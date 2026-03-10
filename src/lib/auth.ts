@@ -1,5 +1,4 @@
 import { SignJWT, jwtVerify } from 'jose'
-import { cookies } from 'next/headers'
 
 // NOTE(Agent): We intentionally crash at startup if JWT_SECRET is unset.
 // Falling back to a default would silently allow anyone to forge valid JWTs in production.
@@ -56,15 +55,24 @@ export async function hashToken(token: string): Promise<string> {
     .join('')
 }
 
-/** Read access token from cookie or Authorization header */
+/**
+ * Read access token from cookie or Authorization header.
+ *
+ * NOTE(Agent): P2-8 from backend perf audit. Replaced `cookies()` from
+ * next/headers with direct cookie header parsing. The next/headers function
+ * added async overhead in edge runtime; parsing the Cookie header is
+ * synchronous and edge-native. Kept `async` for backward compat with callers.
+ */
 export async function extractToken(request: Request): Promise<string | null> {
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7)
   }
   // Fall back to cookie (subscriber session)
-  const cookieStore = await cookies()
-  return cookieStore.get('ds_session')?.value ?? null
+  const cookieHeader = request.headers.get('cookie')
+  if (!cookieHeader) return null
+  const match = cookieHeader.match(/(?:^|;\s*)ds_session=([^;]+)/)
+  return match?.[1] ?? null
 }
 
 export function setSessionCookie(response: Response, token: string): void {

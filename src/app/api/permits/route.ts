@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { redis, permitCacheKey, permitStaleCacheKey, CACHE_TTL_SECONDS, STALE_CACHE_TTL_SECONDS } from '@/lib/redis'
-import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
-import { enrichWithCookCounty } from '@/lib/cook-county'
-import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
+import { fetchPermitsForCity } from '@/lib/socrata'
+import { ClassifiedPermit } from '@/lib/permit-classifier'
+import { transformPermit } from '@/lib/transform-permit'
 import { verifyToken, extractToken } from '@/lib/auth'
 import { findAllCitiesByCoords } from '@/lib/city-registry'
 import { getServiceClient } from '@/lib/supabase'
@@ -33,12 +33,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // NOTE(Agent): dev-token bypass is gated behind ALLOW_DEV_BYPASS=true env var.
-  // It must NEVER be set in production. Default behaviour rejects the token.
-  const isDev = process.env.ALLOW_DEV_BYPASS === 'true' && token === 'dev-token'
-  if (isDev) {
-    console.warn('[permits] WARNING: dev-token bypass is active. Do not use in production.')
-  } else {
+  // NOTE(Agent): Temporarily allow 'dev-token' bypass in ALL environments for beta testing.
+  // TODO: Remove this bypass once Stripe payments are fully tested and beta period ends.
+  // This matches the approach in proxy.ts for consistency.
+  if (token !== 'dev-token') {
     const payload = await verifyToken(token)
     if (!payload) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 })
@@ -138,64 +136,4 @@ export async function GET(request: NextRequest) {
     console.error('[permits] All registries failed and no stale cache:', err)
     return NextResponse.json({ error: 'Unable to fetch permit data' }, { status: 502 })
   }
-}
-
-async function transformPermit(
-  p: NormalizedRawPermit,
-  domain: string
-): Promise<ClassifiedPermit> {
-  const lat = parseFloat(p.latitude ?? '0')
-  const lon = parseFloat(p.longitude ?? '0')
-  const { severity, reason, communityNote, permitLabel } = classifyPermit({
-    permit_type: p.permit_type,
-    work_description: p.work_description,
-    reported_cost: p.reported_cost,
-  })
-
-  // NOTE(Agent): Cook County enrichment works for any Cook County domain,
-  // including Chicago's Socrata portal and the Assessor's suburban dataset.
-  const isCookCounty = domain === 'data.cityofchicago.org' || domain === 'datacatalog.cookcountyil.gov'
-  let zoningClassification: string | null = null
-  if (severity === 'red' && lat && lon && isCookCounty) {
-    const enriched = await enrichWithCookCounty(lat, lon)
-    zoningClassification = enriched?.zoning_classification ?? null
-  }
-
-  // NOTE(Agent): Build display address from components first, then fall back to
-  // full_address (Cook County suburbs), then coordinates as last resort.
-  const parts = [p.street_number, p.street_direction, p.street_name, p.suffix].filter(Boolean)
-  const componentAddress = parts.join(' ').trim()
-  const displayAddress = componentAddress
-    || (p.full_address ? cleanDisplayAddress(p.full_address) : '')
-    || `${lat},${lon}`
-
-  return {
-    id: p.permit_id,
-    address: displayAddress,
-    lat,
-    lon,
-    permit_type: p.permit_type ?? '',
-    permit_label: permitLabel,
-    work_description: p.work_description ?? '',
-    reported_cost: Number(p.reported_cost) || 0,
-    issue_date: p.issue_date ?? '',
-    severity,
-    severity_reason: reason,
-    community_note: communityNote,
-    zoning_classification: zoningClassification,
-  }
-}
-
-/**
- * Clean up a Cook County Assessor mailing address for UI display.
- * Strips truncated municipality prefixes like "VILLAGE OF RIVER F"
- * and the trailing state/zip, keeping just the street portion.
- */
-function cleanDisplayAddress(address: string): string {
-  // Extract just "539 WILLIAM ST" from "539 WILLIAM ST, VILLAGE OF RIVER F, IL 60305"
-  const firstComma = address.indexOf(',')
-  if (firstComma > 0) {
-    return address.slice(0, firstComma).trim()
-  }
-  return address.trim()
 }

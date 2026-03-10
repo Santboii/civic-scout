@@ -1,6 +1,7 @@
 import type { CityRegistry } from './city-registry'
 import type { NormalizedRawPermit } from './socrata'
 import { batchGeocode } from './census-geocoder'
+import { haversineDistance } from './geo-utils'
 
 const DEFAULT_RADIUS_METERS = 8046 // ≈ 5 miles
 
@@ -49,7 +50,7 @@ export async function fetchPermitsFromArcGIS(
         spatialRel: 'esriSpatialRelIntersects',
         distance: String(DEFAULT_RADIUS_METERS),
         units: 'esriSRUnit_Meter',
-        outFields: '*',
+        outFields: buildOutFields(registry),
         outSR: '4326',
         orderByFields: `${registry.column_map.issue_date} DESC`,
         resultRecordCount: '200',
@@ -107,7 +108,7 @@ export async function fetchPermitsFromArcGISNoGeo(
 
     const params = new URLSearchParams({
         where: whereParts.join(' AND '),
-        outFields: '*',
+        outFields: buildOutFields(registry),
         orderByFields: `${registry.column_map.issue_date} DESC`,
         resultRecordCount: '100',
         f: 'json',
@@ -249,19 +250,29 @@ function buildAddressFromPermit(permit: NormalizedRawPermit, city: string): stri
 }
 
 /**
- * Haversine formula — distance in meters between two lat/lon points.
+ * Build a selective outFields string from the registry's column_map.
+ *
+ * NOTE(Agent): P2-3 from backend perf audit. Replaced `outFields: '*'` with
+ * selective fields to reduce response payload size. ArcGIS ignores unknown
+ * field names gracefully, so no new failure modes are introduced.
  */
-function haversineDistance(
-    lat1: number, lon1: number,
-    lat2: number, lon2: number
-): number {
-    const R = 6_371_000 // Earth radius in meters
-    const toRad = (deg: number) => (deg * Math.PI) / 180
-    const dLat = toRad(lat2 - lat1)
-    const dLon = toRad(lon2 - lon1)
-    const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+function buildOutFields(registry: CityRegistry): string {
+    const { column_map } = registry
+    const fields = new Set<string>()
+    // Required fields
+    fields.add(column_map.permit_id)
+    fields.add(column_map.permit_type)
+    fields.add(column_map.work_description)
+    fields.add(column_map.reported_cost)
+    fields.add(column_map.issue_date)
+    fields.add(column_map.latitude)
+    fields.add(column_map.longitude)
+    // Optional fields
+    if (column_map.location) fields.add(column_map.location)
+    if (column_map.full_address) fields.add(column_map.full_address)
+    if (column_map.street_number) fields.add(column_map.street_number)
+    if (column_map.street_direction) fields.add(column_map.street_direction)
+    if (column_map.street_name) fields.add(column_map.street_name)
+    if (column_map.suffix) fields.add(column_map.suffix)
+    return [...fields].join(',')
 }
-
