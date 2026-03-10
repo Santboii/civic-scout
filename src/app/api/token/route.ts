@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
     const supabase = getServiceClient()
 
     // Find stored token hash for this payment intent
-    const { data: row } = await supabase
-      .from('access_tokens')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: row } = await (supabase.from('access_tokens') as any)
       .select('token_hash, expires_at, address_key')
       .eq('stripe_payment_intent_id', session.payment_intent as string)
       .single()
@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
 
   if (session.metadata?.type === 'subscription' && session.customer_email) {
     const supabase = getServiceClient()
-    const { data: user } = await supabase
-      .from('users')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: user } = await (supabase.from('users') as any)
       .select('id, email')
       .eq('email', session.customer_email)
       .single()

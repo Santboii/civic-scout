@@ -108,8 +108,12 @@ export async function GET(request: NextRequest) {
     // NOTE(Agent): P1-5 from backend perf audit — wrapped in Promise.resolve
     // to convert PromiseLike to full Promise, then .catch to suppress
     // unhandled rejection noise when Supabase is unavailable.
+    // NOTE(Agent): The Supabase client is untyped (no generated Database types),
+    // so the `searches` table columns resolve to `never`. This is a best-effort
+    // fire-and-forget insert that works correctly at runtime.
     Promise.resolve(
-      supabase.from('searches').insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase.from('searches') as any).insert({
         address: searchParams.get('address') ?? '',
         lat,
         lon,

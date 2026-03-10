@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
   const supabase = getServiceClient()
 
   // Idempotency check
-  const { data: existing } = await supabase
-    .from('stripe_events')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing } = await (supabase.from('stripe_events') as any)
     .select('id')
     .eq('id', event.id)
     .single()
@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Record event before processing
-  await supabase.from('stripe_events').insert({ id: event.id, type: event.type })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('stripe_events') as any).insert({ id: event.id, type: event.type })
 
   try {
     switch (event.type) {
@@ -48,7 +49,8 @@ export async function POST(request: NextRequest) {
           const tokenHash = await hashToken(token)
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-          await supabase.from('access_tokens').insert({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('access_tokens') as any).insert({
             token_hash: tokenHash,
             address_key: addressKey,
             stripe_payment_intent_id: session.payment_intent as string,
@@ -59,7 +61,8 @@ export async function POST(request: NextRequest) {
 
         if (session.metadata?.type === 'subscription' && session.customer_email) {
           const customerId = session.customer as string
-          await supabase.from('users').upsert(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from('users') as any).upsert(
             {
               email: session.customer_email,
               stripe_customer_id: customerId,
@@ -81,8 +84,8 @@ export async function POST(request: NextRequest) {
           (sub as unknown as { current_period_end: number }).current_period_end * 1000
         ).toISOString()
 
-        await supabase
-          .from('users')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('users') as any)
           .update({ subscription_status: status, subscription_period_end: periodEnd })
           .eq('stripe_customer_id', sub.customer as string)
         break
