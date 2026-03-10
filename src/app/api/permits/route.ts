@@ -92,13 +92,28 @@ export async function GET(request: NextRequest) {
     const deduped = [...new Map(allPermits.map((p) => [p.id, p])).values()]
     permits = deduped
 
+    // NOTE(Agent): Skip caching empty results when any registry uses a
+    // geocoding-dependent adapter (arcgis_no_geo, socrata_no_geo). Empty
+    // results from these adapters are almost always caused by transient
+    // Census/Mapbox geocoder failures — not by genuinely having zero permits.
+    // Caching [] here would serve stale empty results for 4h+ and block
+    // legitimate queries at nearby coordinates.
+    const hasGeocodingAdapter = registries.some(
+      (r) => r.data_source_type === 'arcgis_no_geo' || r.data_source_type === 'socrata_no_geo'
+    )
+    const shouldSkipCache = permits.length === 0 && hasGeocodingAdapter
+
     // Write to primary cache (4-hour TTL) and stale cache (no TTL)
     // NOTE(Agent): P1-3 from backend perf audit — stale keys now have a
     // 14-day TTL to prevent unbounded Redis memory growth.
-    await Promise.all([
-      redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS }),
-      redis.set(staleKey, permits, { ex: STALE_CACHE_TTL_SECONDS }),
-    ])
+    if (!shouldSkipCache) {
+      await Promise.all([
+        redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS }),
+        redis.set(staleKey, permits, { ex: STALE_CACHE_TTL_SECONDS }),
+      ])
+    } else {
+      console.warn(`[permits] Skipping cache write — 0 results from geocoding-dependent adapter(s) for (${lat}, ${lon})`)
+    }
 
     // Log search to Supabase (best-effort)
     const supabase = getServiceClient()
