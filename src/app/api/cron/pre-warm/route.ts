@@ -21,6 +21,10 @@ const HOT_SPOTS: Array<{ lat: number; lon: number; name: string }> = [
   { lat: 41.9027, lon: -87.6960, name: 'Wicker Park' },
 ]
 
+// NOTE(Agent): P1-1 from backend perf audit. Bounded concurrency (4 at a time)
+// to prevent memory pressure and respect Vercel's 60s function timeout.
+const CRON_CONCURRENCY = 4
+
 export async function GET(request: NextRequest) {
   // Protect cron endpoint
   const authHeader = request.headers.get('authorization')
@@ -30,46 +34,54 @@ export async function GET(request: NextRequest) {
 
   const results: Record<string, string> = {}
 
-  for (const spot of HOT_SPOTS) {
-    // Resolve all matching registries from coordinates
-    const registries = await findAllCitiesByCoords(spot.lat, spot.lon)
-    if (registries.length === 0) {
-      results[spot.name] = 'skipped (no registry)'
-      continue
-    }
-
-    // NOTE(Agent): Use primary registry domain for cache key (same as permits API)
-    const primaryDomain = registries[0].domain
-    const cacheKey = permitCacheKey(spot.lat, spot.lon, primaryDomain)
-    try {
-      const existing = await redis.get(cacheKey)
-      if (existing) {
-        results[spot.name] = 'skipped (cached)'
-        continue
-      }
-
-      // Fetch from all registries in parallel, merge, dedup
-      const fetchResults = await Promise.allSettled(
-        registries.map(async (registry) => {
-          const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
-          return Promise.all(
-            raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
-          )
-        })
-      )
-
-      const allPermits: ClassifiedPermit[] = []
-      for (const result of fetchResults) {
-        if (result.status === 'fulfilled') {
-          allPermits.push(...result.value)
+  // Process hot spots in batches of CRON_CONCURRENCY
+  for (let i = 0; i < HOT_SPOTS.length; i += CRON_CONCURRENCY) {
+    const batch = HOT_SPOTS.slice(i, i + CRON_CONCURRENCY)
+    const batchResults = await Promise.allSettled(
+      batch.map(async (spot) => {
+        const registries = await findAllCitiesByCoords(spot.lat, spot.lon)
+        if (registries.length === 0) {
+          return { name: spot.name, status: 'skipped (no registry)' }
         }
-      }
 
-      const permits = [...new Map(allPermits.map((p) => [p.id, p])).values()]
-      await redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS })
-      results[spot.name] = `warmed (${permits.length} permits from ${registries.length} sources)`
-    } catch (err) {
-      results[spot.name] = `error: ${String(err)}`
+        const primaryDomain = registries[0].domain
+        const cacheKey = permitCacheKey(spot.lat, spot.lon, primaryDomain)
+
+        const existing = await redis.get(cacheKey)
+        if (existing) {
+          return { name: spot.name, status: 'skipped (cached)' }
+        }
+
+        const fetchResults = await Promise.allSettled(
+          registries.map(async (registry) => {
+            const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
+            return Promise.all(
+              raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
+            )
+          })
+        )
+
+        const allPermits: ClassifiedPermit[] = []
+        for (const result of fetchResults) {
+          if (result.status === 'fulfilled') {
+            allPermits.push(...result.value)
+          }
+        }
+
+        const permits = [...new Map(allPermits.map((p) => [p.id, p])).values()]
+        await redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS })
+        return { name: spot.name, status: `warmed (${permits.length} permits from ${registries.length} sources)` }
+      })
+    )
+
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') {
+        results[r.value.name] = r.value.status
+      } else {
+        // Extract spot name from the batch by index
+        const idx = batchResults.indexOf(r)
+        results[batch[idx].name] = `error: ${String(r.reason)}`
+      }
     }
   }
 

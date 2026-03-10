@@ -21,3 +21,29 @@ export function permitStaleCacheKey(lat: number, lon: number, domain: string): s
 }
 
 export const CACHE_TTL_SECONDS = 4 * 60 * 60 // 4 hours
+export const STALE_CACHE_TTL_SECONDS = 14 * 24 * 60 * 60 // 14 days
+
+// NOTE(Agent): Cook County GIS enrichment is expensive (external HTTP call per
+// red-severity permit). Zoning classifications don't change frequently, so a
+// 7-day cache aggressively eliminates redundant queries.
+const COOK_COUNTY_CACHE_TTL = 7 * 24 * 60 * 60 // 7 days
+
+// NOTE(Agent): Municipality discovery involves 9 Mapbox reverse-geocode calls +
+// N Socrata group-by queries. The results are stable — municipalities don't change.
+// 24h TTL provides a safety valve; flush `muni_disc:*` manually when onboarding
+// new Cook County suburbs.
+const MUNI_DISCOVERY_CACHE_TTL = 24 * 60 * 60 // 24 hours
+
+export function cookCountyCacheKey(lat: number, lon: number): string {
+  return `cook:${lat.toFixed(4)}:${lon.toFixed(4)}`
+}
+
+export const COOK_COUNTY_CACHE_TTL_SECONDS = COOK_COUNTY_CACHE_TTL
+
+export function muniDiscoveryCacheKey(lat: number, lon: number): string {
+  // NOTE(Agent): toFixed(3) gives ~111m grid cells. Municipality boundaries
+  // are km-scale, so nearby points almost always resolve to the same set.
+  return `muni_disc:${lat.toFixed(3)}:${lon.toFixed(3)}`
+}
+
+export const MUNI_DISCOVERY_CACHE_TTL_SECONDS = MUNI_DISCOVERY_CACHE_TTL

@@ -1,6 +1,7 @@
 import type { CityRegistry } from './city-registry'
 import { fetchPermitsFromArcGIS, fetchPermitsFromArcGISNoGeo } from './arcgis'
 import { batchGeocode } from './census-geocoder'
+import { redis, muniDiscoveryCacheKey, MUNI_DISCOVERY_CACHE_TTL_SECONDS } from './redis'
 
 const RADIUS_METERS = 8046 // ≈ 5 miles
 
@@ -192,27 +193,36 @@ export async function fetchPermitsFromSocrataNoGeo(
   const base = `https://${registry.domain}/resource/${registry.dataset_id}.json`
   const { column_map } = registry
 
-  // Step 1: Reverse-geocode the search point to determine which municipality
-  const municipality = await reverseGeocodeMunicipality(lat, lon)
-  if (!municipality) {
-    if (process.env.NODE_ENV !== 'production') console.log('[socrata-no-geo] Could not determine municipality — skipping')
+  // Step 1: Discover municipalities within the search radius.
+  // NOTE(Agent): We sample 5 points (center + ~4km N/S/E/W offsets) to discover
+  // all municipalities that overlap the search circle. Without this, only the
+  // center-point's municipality is queried, creating a lopsided distribution.
+  const municipalities = await discoverNearbyMunicipalities(lat, lon)
+  if (municipalities.length === 0) {
+    if (process.env.NODE_ENV !== 'production') console.log('[socrata-no-geo] No municipalities found near search point — skipping')
     return []
   }
 
-  // Step 2: Build $where clause targeting the specific municipality
+  if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Discovered ${municipalities.length} municipalities:`, municipalities)
+
+  // Step 2: Build $where clause targeting ALL discovered municipalities
+  const municipalityFilter = municipalities
+    .map((m: string) => `municipality = '${m}'`)
+    .join(' OR ')
+
   const whereParts: string[] = [
-    `municipality = '${municipality}'`,
+    `(${municipalityFilter})`,
     `${column_map.issue_date} IS NOT NULL`,
   ]
 
   const params = new URLSearchParams({
     $where: whereParts.join(' AND '),
     $order: `${column_map.issue_date} DESC`,
-    $limit: '200',
+    $limit: '500',
   })
 
   const url = `${base}?${params}`
-  if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Fetching from ${registry.city} (${municipality}):`, url)
+  if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Fetching:`, url)
 
   const res = await fetch(url, {
     headers: {
@@ -229,7 +239,7 @@ export async function fetchPermitsFromSocrataNoGeo(
   }
 
   const data: RawPermitRow[] = await res.json()
-  if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] ${municipality} raw results:`, data.length)
+  if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] ${municipalities.join(', ')} raw results:`, data.length)
 
   if (data.length === 0) return []
 
@@ -345,85 +355,136 @@ function haversineDistance(
 }
 
 /**
- * Reverse-geocode coordinates to determine the Cook County municipality name.
+ * Discover all Cook County municipalities within the search radius.
  *
- * NOTE(Agent): Cook County's dataset uses formal municipality names like
- * "VILLAGE OF MELROSE PARK", "CITY OF EVANSTON", "TOWN OF CICERO".
- * This function uses Mapbox reverse geocoding to get the place name,
- * then queries the Socrata dataset to find the exact municipality string
- * via a LIKE match.
+ * NOTE(Agent): Samples 9 points across the search circle (center + 8 compass
+ * directions at ~3km offset), reverse-geocodes each via Mapbox, resolves the
+ * place names to Cook County municipality strings, and deduplicates. The 3km
+ * offset (vs the original 4km) is critical because Cook County suburbs can be
+ * as narrow as ~3km (e.g., Oak Park). A larger offset overshoots these
+ * municipalities entirely, creating gaps in the permit distribution.
+ *
+ * ~3km offset ≈ 0.027° lat, 0.036° lon at latitude ~42°N.
  */
-async function reverseGeocodeMunicipality(
+async function discoverNearbyMunicipalities(
   lat: number,
   lon: number
-): Promise<string | null> {
+): Promise<string[]> {
+  // NOTE(Agent): P0-2 from backend perf audit — cache municipality discovery
+  // to avoid 9 Mapbox + N Socrata calls on every cache miss.
+  const cacheKey = muniDiscoveryCacheKey(lat, lon)
+  try {
+    const cached = await redis.get<string[]>(cacheKey)
+    if (cached) return cached
+  } catch {
+    // Redis unavailable — fall through to live discovery
+  }
+
+  const LAT_OFFSET = 0.027   // ~3km in latitude
+  const LON_OFFSET = 0.036   // ~3km in longitude at 42°N
+  const DIAG_LAT = 0.019     // ~2.1km diagonal lat component (3km * cos(45°))
+  const DIAG_LON = 0.025     // ~2.1km diagonal lon component
+
+  const samplePoints = [
+    { lat, lon },                                           // Center
+    { lat: lat + LAT_OFFSET, lon },                         // N
+    { lat: lat - LAT_OFFSET, lon },                         // S
+    { lat, lon: lon + LON_OFFSET },                         // E
+    { lat, lon: lon - LON_OFFSET },                         // W
+    { lat: lat + DIAG_LAT, lon: lon + DIAG_LON },           // NE
+    { lat: lat + DIAG_LAT, lon: lon - DIAG_LON },           // NW
+    { lat: lat - DIAG_LAT, lon: lon + DIAG_LON },           // SE
+    { lat: lat - DIAG_LAT, lon: lon - DIAG_LON },           // SW
+  ]
+
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
   if (!token) {
     console.warn('[socrata-no-geo] No NEXT_PUBLIC_MAPBOX_TOKEN — cannot reverse-geocode')
-    return null
+    return []
   }
 
-  try {
-    const url = `https://api.mapbox.com/search/geocode/v6/reverse?longitude=${lon}&latitude=${lat}&types=place&limit=1&access_token=${token}`
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(5000),
+  // Reverse-geocode all sample points in parallel
+  const placeNames = await Promise.all(
+    samplePoints.map(async (pt) => {
+      try {
+        const url = `https://api.mapbox.com/search/geocode/v6/reverse?longitude=${pt.lon}&latitude=${pt.lat}&types=place&limit=1&access_token=${token}`
+        const res = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        })
+        if (!res.ok) return null
+
+        const data = await res.json() as {
+          features?: Array<{ properties?: { name?: string } }>
+        }
+        return data.features?.[0]?.properties?.name ?? null
+      } catch {
+        return null
+      }
     })
+  )
 
-    if (!res.ok) {
-      console.warn(`[socrata-no-geo] Mapbox reverse geocode HTTP ${res.status}`)
-      return null
-    }
+  // Deduplicate place names (skip nulls and "Chicago" — it has its own adapter)
+  const uniquePlaces = [...new Set(
+    placeNames.filter((n): n is string => n !== null && n.toUpperCase() !== 'CHICAGO')
+  )]
 
-    const data = await res.json() as {
-      features?: Array<{
-        properties?: { name?: string }
-      }>
-    }
+  if (uniquePlaces.length === 0) return []
 
-    const placeName = data.features?.[0]?.properties?.name
-    if (!placeName) {
-      if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] No place name found for (${lat}, ${lon})`)
-      return null
-    }
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[socrata-no-geo] Reverse-geocoded places: [${uniquePlaces.join(', ')}]`)
+  }
 
-    if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Reverse-geocoded to: ${placeName}`)
+  // Resolve each place name to its Cook County municipality string in parallel
+  const socrataToken = process.env.SOCRATA_APP_TOKEN ?? ''
+  const municipalityResults = await Promise.all(
+    uniquePlaces.map((place) => resolveToMunicipality(place, socrataToken))
+  )
 
-    // NOTE(Agent): Cook County dataset uses formal names like "VILLAGE OF MELROSE PARK".
-    // We can't predict the prefix (Village/City/Town), so query Socrata for the match.
+  const allMunicipalities = municipalityResults
+    .flat()
+    .filter((m): m is string => m !== null)
+
+  // Deduplicate and return
+  const result = [...new Set(allMunicipalities)]
+
+  // Cache the discovery result (try-catch: per PE review, never crash on cache failure)
+  try {
+    await redis.set(cacheKey, result, { ex: MUNI_DISCOVERY_CACHE_TTL_SECONDS })
+  } catch {
+    // Redis unavailable — result still returned, just not cached
+  }
+
+  return result
+}
+
+/**
+ * Resolve a Mapbox place name (e.g., "Melrose Park") to its Cook County
+ * Assessor municipality string (e.g., "VILLAGE OF MELROSE PARK").
+ */
+async function resolveToMunicipality(
+  placeName: string,
+  appToken: string
+): Promise<string[]> {
+  try {
     const matchUrl = `https://datacatalog.cookcountyil.gov/resource/6yjf-dfxs.json?$select=municipality&$where=municipality+like+'%25${encodeURIComponent(placeName.toUpperCase())}%25'&$group=municipality&$limit=5`
 
-    const matchRes = await fetch(matchUrl, {
+    const res = await fetch(matchUrl, {
       headers: {
-        'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '',
+        'X-App-Token': appToken,
         Accept: 'application/json',
       },
       signal: AbortSignal.timeout(5000),
     })
 
-    if (!matchRes.ok) {
-      // Fallback: try the raw place name with common prefixes
-      if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Municipality lookup failed, trying common prefixes`)
-      return null
-    }
+    if (!res.ok) return []
 
-    const matches = await matchRes.json() as Array<{ municipality: string }>
-
-    if (matches.length === 0) {
-      if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] No municipality match for "${placeName}"`)
-      return null
-    }
-
-    // If there's exactly one match, use it. If multiple, pick the closest name match.
-    const exactMatch = matches.find(
-      (m) => m.municipality.toUpperCase().includes(placeName.toUpperCase())
-    )
-    const result = exactMatch?.municipality ?? matches[0].municipality
-
-    if (process.env.NODE_ENV !== 'production') console.log(`[socrata-no-geo] Resolved municipality: ${result}`)
-    return result
-  } catch (err) {
-    console.warn('[socrata-no-geo] Reverse geocode error:', err)
-    return null
+    const matches = await res.json() as Array<{ municipality: string }>
+    return matches
+      .map((m) => m.municipality)
+      .filter((m) => m.toUpperCase() !== 'CITY OF CHICAGO')
+  } catch {
+    return []
   }
 }
+

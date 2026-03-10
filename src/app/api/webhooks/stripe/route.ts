@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createServiceClient } from '@/lib/supabase'
+import { getServiceClient } from '@/lib/supabase'
 import { signLookupToken, signSubscriberToken, hashToken } from '@/lib/auth'
 
 export const runtime = 'nodejs'
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  const supabase = createServiceClient()
+  const supabase = getServiceClient()
 
   // Idempotency check
   const { data: existing } = await supabase

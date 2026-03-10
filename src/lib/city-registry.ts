@@ -1,5 +1,5 @@
 import { redis } from './redis'
-import { createServiceClient } from './supabase'
+import { getServiceClient } from './supabase'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ export async function getAllRegistries(): Promise<CityRegistry[]> {
     if (cached) return cached
 
     // Fetch from Supabase
-    const supabase = createServiceClient()
+    const supabase = getServiceClient()
     const { data, error } = await supabase
         .from('city_registries')
         .select('*')

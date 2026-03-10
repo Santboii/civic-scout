@@ -21,7 +21,11 @@ interface CensusResponse {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const GEOCODE_CACHE_TTL = 30 * 24 * 60 * 60 // 30 days — addresses don't move
-const MAX_CONCURRENT = 5
+// NOTE(Agent): P0-3 from backend perf audit. Increased from 5 to 10 for better
+// throughput. Conservative cap (vs 15+) because the Census Bureau geocoder is
+// unreliable — higher concurrency risks simultaneous timeout cascades that then
+// fan out into Mapbox fallback calls, which could hit Mapbox rate limits.
+const MAX_CONCURRENT = 10
 
 // ── Public API ──────────────────────────────────────────────────────────────
 

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { redis, permitCacheKey, permitStaleCacheKey, CACHE_TTL_SECONDS } from '@/lib/redis'
+import { redis, permitCacheKey, permitStaleCacheKey, CACHE_TTL_SECONDS, STALE_CACHE_TTL_SECONDS } from '@/lib/redis'
 import { fetchPermitsForCity, NormalizedRawPermit } from '@/lib/socrata'
 import { enrichWithCookCounty } from '@/lib/cook-county'
 import { classifyPermit, ClassifiedPermit } from '@/lib/permit-classifier'
 import { verifyToken, extractToken } from '@/lib/auth'
 import { findAllCitiesByCoords } from '@/lib/city-registry'
-import { createServiceClient } from '@/lib/supabase'
+import { getServiceClient } from '@/lib/supabase'
 
 export const runtime = 'edge'
 
@@ -95,21 +95,28 @@ export async function GET(request: NextRequest) {
     permits = deduped
 
     // Write to primary cache (4-hour TTL) and stale cache (no TTL)
+    // NOTE(Agent): P1-3 from backend perf audit — stale keys now have a
+    // 14-day TTL to prevent unbounded Redis memory growth.
     await Promise.all([
       redis.set(cacheKey, permits, { ex: CACHE_TTL_SECONDS }),
-      redis.set(staleKey, permits),
+      redis.set(staleKey, permits, { ex: STALE_CACHE_TTL_SECONDS }),
     ])
 
     // Log search to Supabase (best-effort)
-    const supabase = createServiceClient()
+    const supabase = getServiceClient()
     const cityNames = registries.map((r) => r.city).join(', ')
-    supabase.from('searches').insert({
-      address: searchParams.get('address') ?? '',
-      lat,
-      lon,
-      result_count: permits.length,
-      city: cityNames,
-    }).then(() => { })
+    // NOTE(Agent): P1-5 from backend perf audit — wrapped in Promise.resolve
+    // to convert PromiseLike to full Promise, then .catch to suppress
+    // unhandled rejection noise when Supabase is unavailable.
+    Promise.resolve(
+      supabase.from('searches').insert({
+        address: searchParams.get('address') ?? '',
+        lat,
+        lon,
+        result_count: permits.length,
+        city: cityNames,
+      })
+    ).catch(() => { })
 
     return NextResponse.json(
       { permits, source: 'live', city: cityNames },

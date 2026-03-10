@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createServiceClient } from '@/lib/supabase'
+import { getServiceClient } from '@/lib/supabase'
 import { signLookupToken, signSubscriberToken, hashToken } from '@/lib/auth'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' })
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   if (session.metadata?.type === 'lookup') {
     const addressKey = session.metadata.addressKey
-    const supabase = createServiceClient()
+    const supabase = getServiceClient()
 
     // Find stored token hash for this payment intent
     const { data: row } = await supabase
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (session.metadata?.type === 'subscription' && session.customer_email) {
-    const supabase = createServiceClient()
+    const supabase = getServiceClient()
     const { data: user } = await supabase
       .from('users')
       .select('id, email')
