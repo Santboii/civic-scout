@@ -253,26 +253,41 @@ function buildAddressFromPermit(permit: NormalizedRawPermit, city: string): stri
  * Build a selective outFields string from the registry's column_map.
  *
  * NOTE(Agent): P2-3 from backend perf audit. Replaced `outFields: '*'` with
- * selective fields to reduce response payload size. ArcGIS ignores unknown
- * field names gracefully, so no new failure modes are introduced.
+ * selective fields to reduce response payload size. ArcGIS returns 400 for
+ * unknown field names, so we must filter out placeholder values like 'UNUSED'
+ * that appear in no-geo registries (e.g., Naperville).
  */
 function buildOutFields(registry: CityRegistry): string {
     const { column_map } = registry
     const fields = new Set<string>()
-    // Required fields
-    fields.add(column_map.permit_id)
-    fields.add(column_map.permit_type)
-    fields.add(column_map.work_description)
-    fields.add(column_map.reported_cost)
-    fields.add(column_map.issue_date)
-    fields.add(column_map.latitude)
-    fields.add(column_map.longitude)
+
+    const addIfReal = (field: string | undefined) => {
+        if (field && field !== 'UNUSED' && field !== 'unused') {
+            fields.add(field)
+        }
+    }
+
+    // Required fields (may be 'UNUSED' for no-geo adapters)
+    addIfReal(column_map.permit_id)
+    addIfReal(column_map.permit_type)
+    addIfReal(column_map.work_description)
+    addIfReal(column_map.reported_cost)
+    addIfReal(column_map.issue_date)
+    // NOTE(Agent): Skip lat/lon for no-geo adapters — these columns don't
+    // exist in the dataset. The addIfReal sentinel check is a secondary
+    // safety net; this structural check is the primary guard.
+    if (registry.geo_type !== 'none') {
+        addIfReal(column_map.latitude)
+        addIfReal(column_map.longitude)
+    }
     // Optional fields
-    if (column_map.location) fields.add(column_map.location)
-    if (column_map.full_address) fields.add(column_map.full_address)
-    if (column_map.street_number) fields.add(column_map.street_number)
-    if (column_map.street_direction) fields.add(column_map.street_direction)
-    if (column_map.street_name) fields.add(column_map.street_name)
-    if (column_map.suffix) fields.add(column_map.suffix)
-    return [...fields].join(',')
+    addIfReal(column_map.location)
+    addIfReal(column_map.full_address)
+    addIfReal(column_map.street_number)
+    addIfReal(column_map.street_direction)
+    addIfReal(column_map.street_name)
+    addIfReal(column_map.suffix)
+
+    // Fallback to * if no valid fields (shouldn't happen with a valid registry)
+    return fields.size > 0 ? [...fields].join(',') : '*'
 }
