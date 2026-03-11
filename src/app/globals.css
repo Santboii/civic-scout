@@ -45,6 +45,11 @@
   --status-green: #1B9B6C;
   --status-indigo: #4A90B0;
 
+  /* Data Layer Colors */
+  --layer-crime: #D94F3B;
+  --layer-violation: #D97706;
+  --layer-crash: #4A90B0;
+
   /* Spacing Scale (8px base) */
   --space-1: 4px;
   --space-2: 8px;

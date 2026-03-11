@@ -47,3 +47,21 @@ export function muniDiscoveryCacheKey(lat: number, lon: number): string {
 }
 
 export const MUNI_DISCOVERY_CACHE_TTL_SECONDS = MUNI_DISCOVERY_CACHE_TTL
+
+// ── Data Layers Cache ───────────────────────────────────────────────────────
+
+// NOTE(Agent): Shorter TTL than permits (2h vs 4h) because crime/violation/crash
+// data updates more frequently than permit records.
+const DATA_LAYERS_CACHE_TTL = 2 * 60 * 60 // 2 hours
+const DATA_LAYERS_STALE_TTL = 7 * 24 * 60 * 60 // 7 days
+
+export function dataLayersCacheKey(lat: number, lon: number, layer: string): string {
+  return `layers:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
+}
+
+export function dataLayersStaleCacheKey(lat: number, lon: number, layer: string): string {
+  return `layers_stale:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
+}
+
+export const DATA_LAYERS_CACHE_TTL_SECONDS = DATA_LAYERS_CACHE_TTL
+export const DATA_LAYERS_STALE_TTL_SECONDS = DATA_LAYERS_STALE_TTL

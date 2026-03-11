@@ -1,0 +1,210 @@
+.container {
+    position: absolute;
+    z-index: 10;
+    bottom: var(--space-6);
+    left: var(--space-6);
+}
+
+/* Mobile: top-right to avoid sidebar overlap */
+@media (max-width: 1023px) {
+    .container {
+        bottom: auto;
+        left: auto;
+        top: var(--space-4);
+        right: var(--space-4);
+    }
+}
+
+.pill {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-full);
+    background: var(--background-card);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.pill:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-glass);
+}
+
+.pillIcon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.pillBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-full);
+    background: var(--accent-primary);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.panel {
+    background: var(--background-card);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-glass);
+    padding: var(--space-4);
+    min-width: 240px;
+    animation: fadeSlideUp 0.25s ease-out;
+}
+
+.panelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.panelTitle {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+}
+
+.closeBtn {
+    padding: 4px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.closeBtn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.layerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+}
+
+.layerRow+.layerRow {
+    border-top: 1px solid var(--border-glass);
+}
+
+.layerIcon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.layerInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.layerLabel {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.layerCount {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.layerSpinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Toggle Switch */
+.toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.toggleInput {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggleTrack {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.1);
+    transition: background 0.2s ease;
+}
+
+.toggleInput:checked+.toggleTrack {
+    background: var(--accent-primary);
+}
+
+.toggleKnob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.toggleInput:checked~.toggleKnob {
+    transform: translateX(16px);
+}
+
+.toggleInput:focus-visible+.toggleTrack {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}

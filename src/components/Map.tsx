@@ -4,6 +4,8 @@ import { useEffect, useRef, useCallback, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
+import type { DataLayerItem } from '@/lib/data-layers'
+import { LAYER_SEVERITY_LABELS } from '@/lib/data-layer-classifier'
 
 interface MapProps {
   permits: ClassifiedPermit[]
@@ -11,6 +13,8 @@ interface MapProps {
   onPermitSelect?: (permit: ClassifiedPermit) => void
   selectedPermitId?: string | null
   onPermitDeselect?: () => void
+  dataLayerItems?: DataLayerItem[]
+  onDataLayerSelect?: (item: DataLayerItem) => void
 }
 
 // NOTE(Agent): Hex values required for inline HTML Leaflet markers/popups
@@ -26,11 +30,25 @@ const TEXT_PRIMARY = '#1A1D26'
 const TEXT_SECONDARY = '#5C6370'
 const TEXT_MUTED = '#9CA3AF'
 
+// NOTE(Agent): Layer-specific colors and marker shapes for visual differentiation.
+// Smaller than permit markers (10px vs 16px) to keep permits visually primary.
+const LAYER_COLORS: Record<string, string> = {
+  crimes: '#D94F3B',
+  violations: '#D97706',
+  crashes: '#4A90B0',
+}
+
+const LAYER_LABELS: Record<string, string> = {
+  crimes: 'Crime',
+  violations: 'Violation',
+  crashes: 'Crash',
+}
+
 // NOTE(Agent): Exported as memo'd component to prevent re-renders from unrelated
 // parent state (selectedMapPermit, loading, showPayment, etc.).
 export default memo(Map)
 
-function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect }: MapProps) {
+function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect, dataLayerItems = [], onDataLayerSelect }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<globalThis.Map<string, L.Marker>>(new globalThis.Map())
@@ -38,6 +56,7 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
   // NOTE(Agent): Track the previously-selected ID so the lightweight selection effect
   // can restore the old marker's icon without rebuilding all markers.
   const prevSelectedIdRef = useRef<string | null>(null)
+  const layerMarkersRef = useRef<L.Marker[]>([])
   // NOTE(Agent): Track whether the popupclose was triggered programmatically
   // (e.g. when opening a different marker's popup) vs. by user interaction.
   // Prevents spurious deselect calls during marker switches.
@@ -75,6 +94,23 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
 
     setTimeout(() => { mapRef.current?.invalidateSize() }, 100)
   }, [center])
+
+  // NOTE(Agent): Distinct marker shapes per layer type. 10px base size
+  // (vs 16px for permits) to keep layer data visually subordinate.
+  // Crime=diamond, Violation=square, Crash=triangle.
+  const createLayerIcon = useCallback((layerType: string, color: string) => {
+    const shapes: Record<string, string> = {
+      crimes: `<div style="width:10px;height:10px;transform:rotate(45deg);border-radius:2px;border:1.5px solid rgba(255,255,255,0.9);background:${color};box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:pointer"></div>`,
+      violations: `<div style="width:10px;height:10px;border-radius:2px;border:1.5px solid rgba(255,255,255,0.9);background:${color};box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:pointer"></div>`,
+      crashes: `<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid ${color};filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3));cursor:pointer"></div>`,
+    }
+    return L.divIcon({
+      className: '',
+      html: shapes[layerType] ?? shapes.crimes,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    })
+  }, [])
 
   // NOTE(Agent): Helper to create a permit marker icon. `isSelected` controls
   // whether the marker gets the enlarged, glowing "selected" treatment.
@@ -219,6 +255,86 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permits, center, createPermitIcon, onPermitSelect, onPermitDeselect])
 
+  // ── Data Layer Markers ──────────────────────────────────────────────────
+  // NOTE(Agent): Separate effect for data layer markers. Rebuilds when
+  // dataLayerItems changes (i.e., when a layer is toggled or data loads).
+  // These markers are visually subordinate to permits (smaller, distinct shapes).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    // Remove previous layer markers
+    layerMarkersRef.current.forEach((m) => m.remove())
+    layerMarkersRef.current = []
+
+    dataLayerItems.forEach((item) => {
+      // NOTE(Agent): Shape = type (diamond/square/triangle), Color = severity (red/yellow/green).
+      // This is the core "typed severity" visual encoding.
+      const severityColor = SEVERITY_COLORS[item.severity] ?? SEVERITY_COLORS.green
+      const typeColor = LAYER_COLORS[item.layerType] ?? '#9CA3AF'
+      const icon = createLayerIcon(item.layerType, severityColor)
+      const severityLabel = LAYER_SEVERITY_LABELS[item.severity]?.[item.layerType] ?? ''
+
+      let popupContent: string
+      if (item.layerType === 'crimes') {
+        popupContent = `
+          <div style="padding:10px;font-family:system-ui;min-width:180px;color:${TEXT_PRIMARY}">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;margin:0;color:${typeColor}">Crime Incident</p>
+              <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:${severityColor}1A;color:${severityColor}">${severityLabel}</span>
+            </div>
+            <p style="font-weight:700;font-size:13px;margin:0 0 6px;color:${TEXT_PRIMARY}">${item.primaryType}</p>
+            <p style="font-size:11px;margin:0 0 4px;color:${TEXT_SECONDARY}">${item.block}</p>
+            <p style="font-size:10px;margin:0;color:${TEXT_MUTED}">${item.date ? new Date(item.date).toLocaleDateString() : ''}</p>
+            ${item.arrest ? '<span style="display:inline-block;margin-top:6px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(27,155,108,0.08);color:#1B9B6C">ARREST</span>' : ''}
+            <button data-layer-id="${item.id}" style="display:block;width:100%;margin-top:8px;padding:6px 0;border:none;border-radius:6px;background:${typeColor};color:#fff;font-size:11px;font-weight:600;cursor:pointer">View Details →</button>
+          </div>`
+      } else if (item.layerType === 'violations') {
+        const isOpen = item.violationStatus.toUpperCase().includes('OPEN')
+        popupContent = `
+          <div style="padding:10px;font-family:system-ui;min-width:180px;color:${TEXT_PRIMARY}">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;margin:0;color:${typeColor}">Building Violation</p>
+              <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:${severityColor}1A;color:${severityColor}">${severityLabel}</span>
+            </div>
+            <p style="font-weight:700;font-size:13px;margin:0 0 6px;color:${TEXT_PRIMARY}">${item.violationCode || 'Violation'}</p>
+            <p style="font-size:11px;margin:0 0 4px;color:${TEXT_SECONDARY}">${item.address}</p>
+            <span style="display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:${isOpen ? 'rgba(217,79,59,0.08)' : 'rgba(27,155,108,0.08)'};color:${isOpen ? '#D94F3B' : '#1B9B6C'}">${isOpen ? 'OPEN' : 'CLOSED'}</span>
+            <button data-layer-id="${item.id}" style="display:block;width:100%;margin-top:8px;padding:6px 0;border:none;border-radius:6px;background:${typeColor};color:#fff;font-size:11px;font-weight:600;cursor:pointer">View Details →</button>
+          </div>`
+      } else {
+        popupContent = `
+          <div style="padding:10px;font-family:system-ui;min-width:180px;color:${TEXT_PRIMARY}">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;margin:0;color:${typeColor}">Traffic Crash</p>
+              <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:${severityColor}1A;color:${severityColor}">${severityLabel}</span>
+            </div>
+            <p style="font-weight:700;font-size:13px;margin:0 0 6px;color:${TEXT_PRIMARY}">${item.crashType || 'Traffic Crash'}</p>
+            <p style="font-size:11px;margin:0 0 4px;color:${TEXT_SECONDARY}">${item.primContributoryCause}</p>
+            ${item.injuriesTotal > 0 ? `<span style="display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(217,79,59,0.08);color:#D94F3B">${item.injuriesTotal} INJURED</span>` : ''}
+            <button data-layer-id="${item.id}" style="display:block;width:100%;margin-top:8px;padding:6px 0;border:none;border-radius:6px;background:${typeColor};color:#fff;font-size:11px;font-weight:600;cursor:pointer">View Details →</button>
+          </div>`
+      }
+
+      const marker = L.marker([item.lat, item.lon], { icon })
+        .bindPopup(popupContent, { offset: [0, -3], maxWidth: 280, className: 'modern-map-popup' })
+        .addTo(map)
+
+      // Bridge popup button clicks into React state
+      marker.on('popupopen', () => {
+        const popupEl = marker.getPopup()?.getElement()
+        const btn = popupEl?.querySelector(`[data-layer-id="${item.id}"]`)
+        btn?.addEventListener('click', () => {
+          onDataLayerSelect?.(item)
+          marker.closePopup()
+        }, { once: true })
+      })
+
+      layerMarkersRef.current.push(marker)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataLayerItems, onDataLayerSelect])
+
   // NOTE(Agent): Lightweight selection-icon effect — only swaps icons for the
   // previously-selected and newly-selected markers. Does NOT rebuild anything else.
   // This fires when a sidebar card is clicked, keeping INP low.
@@ -314,6 +430,31 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
               </span>
             </div>
           ))}
+          {/* NOTE(Agent): Conditional legend entries for enabled data layers.
+              Only shown when there are data layer items on the map. */}
+          {dataLayerItems.length > 0 && (
+            <div className="pt-2 border-t mt-2" style={{ borderColor: 'var(--border-glass)' }}>
+              {(['crimes', 'violations', 'crashes'] as const)
+                .filter((type) => dataLayerItems.some((i) => i.layerType === type))
+                .map((type) => (
+                  <div key={type} className="flex items-center gap-2.5 mt-1.5 first:mt-0">
+                    <div
+                      className="w-2.5 h-2.5"
+                      aria-hidden="true"
+                      style={{
+                        backgroundColor: LAYER_COLORS[type],
+                        borderRadius: type === 'crimes' ? '2px' : type === 'crashes' ? '0' : '1px',
+                        transform: type === 'crimes' ? 'rotate(45deg) scale(0.8)' : type === 'crashes' ? 'rotate(45deg) scale(0.8)' : 'none',
+                        boxShadow: `0 1px 4px ${LAYER_COLORS[type]}33`,
+                      }}
+                    />
+                    <span className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      {LAYER_LABELS[type]}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
           <div className="pt-2 border-t mt-2" style={{ borderColor: 'var(--border-glass)' }}>
             <div className="flex items-center gap-2.5">
               <div

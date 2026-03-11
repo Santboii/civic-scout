@@ -9,8 +9,12 @@ import SeverityFilter from '@/components/SeverityFilter'
 import LandingHero from '@/components/LandingHero'
 import PaymentModal from '@/components/PaymentModal'
 import PermitDetailModal from '@/components/PermitDetailModal'
+import LayerToggle from '@/components/LayerToggle'
+import DataLayerList from '@/components/DataLayerList'
+import DataLayerDetailModal from '@/components/DataLayerDetailModal'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
 import type { PermitSeverity } from '@/lib/permit-classifier'
+import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash } from '@/lib/data-layers'
 
 // Leaflet requires browser APIs — load client-side only
 const Map = dynamic(() => import('@/components/Map'), { ssr: false })
@@ -35,6 +39,19 @@ function HomeContent() {
   const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
   const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
   const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null)
+
+  // ── Data Layer State ──────────────────────────────────────────────────
+  const [enabledLayers, setEnabledLayers] = useState<Set<DataLayerType>>(new Set())
+  const [layerData, setLayerData] = useState<{
+    crimes: CrimeIncident[]
+    violations: BuildingViolation[]
+    crashes: TrafficCrash[]
+  }>({ crimes: [], violations: [], crashes: [] })
+  const [layerLoading, setLayerLoading] = useState<Record<DataLayerType, boolean>>({
+    crimes: false, violations: false, crashes: false,
+  })
+  const [selectedLayerItem, setSelectedLayerItem] = useState<DataLayerItem | null>(null)
+  const [selectedLayerItemId, setSelectedLayerItemId] = useState<string | null>(null)
 
   // NOTE(Agent): Severity order used for filtering — 'green' shows all,
   // 'yellow' shows yellow+red, 'red' shows only red.
@@ -151,6 +168,93 @@ function HomeContent() {
     }
   }, [search, token, fetchPermits])
 
+  // ── Data Layer Fetching ───────────────────────────────────────────────
+  // NOTE(Agent): Lazy-fetch — only fetches when a layer is enabled AND we
+  // have an active search + token. Layers are fetched independently.
+  const fetchDataLayers = useCallback(
+    async (lat: number, lon: number, accessToken: string, layers: DataLayerType[]) => {
+      if (layers.length === 0) return
+
+      // Set loading for requested layers
+      setLayerLoading((prev) => {
+        const next = { ...prev }
+        for (const l of layers) next[l] = true
+        return next
+      })
+
+      try {
+        const res = await fetch(
+          `/api/data-layers?lat=${lat}&lon=${lon}&layers=${layers.join(',')}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+
+        if (!res.ok) {
+          console.error('[data-layers] API error:', res.status)
+          return
+        }
+
+        const data = await res.json() as Record<string, { data: DataLayerItem[] }>
+
+        setLayerData((prev) => {
+          const next = { ...prev }
+          if (data.crimes) next.crimes = data.crimes.data as CrimeIncident[]
+          if (data.violations) next.violations = data.violations.data as BuildingViolation[]
+          if (data.crashes) next.crashes = data.crashes.data as TrafficCrash[]
+          return next
+        })
+      } catch (err) {
+        console.error('[data-layers] Fetch failed:', err)
+      } finally {
+        setLayerLoading((prev) => {
+          const next = { ...prev }
+          for (const l of layers) next[l] = false
+          return next
+        })
+      }
+    },
+    []
+  )
+
+  // Trigger layer fetch when layers are toggled on
+  const handleLayerToggle = useCallback(
+    (layer: DataLayerType) => {
+      setEnabledLayers((prev) => {
+        const next = new Set(prev)
+        if (next.has(layer)) {
+          next.delete(layer)
+          // Clear data for disabled layer
+          setLayerData((d) => ({ ...d, [layer]: [] }))
+        } else {
+          next.add(layer)
+          // Fetch if we have an active search
+          if (search && token) {
+            fetchDataLayers(search.lat, search.lon, token, [layer])
+          }
+        }
+        return next
+      })
+    },
+    [search, token, fetchDataLayers]
+  )
+
+  // Merge enabled layer items for the map
+  const dataLayerItems: DataLayerItem[] = useMemo(() => {
+    const items: DataLayerItem[] = []
+    if (enabledLayers.has('crimes')) items.push(...layerData.crimes)
+    if (enabledLayers.has('violations')) items.push(...layerData.violations)
+    if (enabledLayers.has('crashes')) items.push(...layerData.crashes)
+    return items
+  }, [enabledLayers, layerData])
+
+  // Layer counts for the toggle panel
+  const layerCounts: Partial<Record<DataLayerType, number>> = useMemo(() => {
+    const counts: Partial<Record<DataLayerType, number>> = {}
+    if (enabledLayers.has('crimes')) counts.crimes = layerData.crimes.length
+    if (enabledLayers.has('violations')) counts.violations = layerData.violations.length
+    if (enabledLayers.has('crashes')) counts.crashes = layerData.crashes.length
+    return counts
+  }, [enabledLayers, layerData])
+
   function handleSearch(s: { address: string; lat: number; lon: number }) {
     setSearch(s)
     setPermits([])
@@ -246,7 +350,18 @@ function HomeContent() {
             onPermitSelect={setSelectedMapPermit}
             selectedPermitId={selectedPermitId}
             onPermitDeselect={() => setSelectedPermitId(null)}
+            dataLayerItems={dataLayerItems}
+            onDataLayerSelect={setSelectedLayerItem}
           />
+          {/* Layer Toggle Panel — floating on the map */}
+          {search && (
+            <LayerToggle
+              enabledLayers={enabledLayers}
+              onToggle={handleLayerToggle}
+              counts={layerCounts}
+              loading={layerLoading}
+            />
+          )}
           {loading && (
             <div
               className="absolute inset-0 flex items-center justify-center z-20"
@@ -370,6 +485,44 @@ function HomeContent() {
               onViewDetails={(permit) => setSelectedMapPermit(permit)}
             />
 
+            {/* Neighborhood Activity — data layers with severity */}
+            {enabledLayers.size > 0 && (
+              <details className="mt-4 pt-4 border-t group" style={{ borderTopColor: 'var(--border-glass)' }} open>
+                <summary
+                  className="flex items-center justify-between cursor-pointer list-none select-none"
+                  style={{ outline: 'none' }}
+                >
+                  <span
+                    className="text-[9px] font-semibold uppercase tracking-[0.25em]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Neighborhood Activity
+                  </span>
+                  <span
+                    className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: 'rgba(10, 158, 142, 0.08)',
+                      color: 'var(--accent-primary)',
+                      border: '1px solid rgba(10, 158, 142, 0.15)',
+                    }}
+                  >
+                    {dataLayerItems.length} nearby
+                  </span>
+                </summary>
+                <DataLayerList
+                  items={dataLayerItems}
+                  enabledLayers={enabledLayers}
+                  selectedItemId={selectedLayerItemId}
+                  onItemClick={(item) => {
+                    setSelectedLayerItemId((prev) =>
+                      prev === item.id ? null : item.id
+                    )
+                  }}
+                  onViewDetails={(item) => setSelectedLayerItem(item)}
+                />
+              </details>
+            )}
+
             {/* Data Attribution Footer */}
             <div className="mt-12 pt-8 border-t" style={{ borderTopColor: 'var(--border-strong)' }}>
               <h2
@@ -477,6 +630,13 @@ function HomeContent() {
           permit={selectedMapPermit}
           cityName={cityName}
           onClose={() => setSelectedMapPermit(null)}
+        />
+      )}
+
+      {selectedLayerItem && (
+        <DataLayerDetailModal
+          item={selectedLayerItem}
+          onClose={() => setSelectedLayerItem(null)}
         />
       )}
     </main>
