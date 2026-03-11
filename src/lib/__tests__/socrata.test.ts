@@ -22,6 +22,7 @@ const CHICAGO_REGISTRY: CityRegistry = {
         street_direction: 'street_direction',
         street_name: 'street_name',
         suffix: 'suffix',
+        permit_status: 'permit_status',
     },
     permit_type_filter: "permit_type IN ('PERMIT - NEW CONSTRUCTION','PERMIT - RENOVATION/ALTERATION')",
     geo_type: 'point',
@@ -31,6 +32,7 @@ const CHICAGO_REGISTRY: CityRegistry = {
     enabled: true,
     data_source_type: 'socrata' as const,
     arcgis_url: null,
+    permit_status_values: ['ACTIVE', 'PHASED PERMITTING'],
 }
 
 const SEATTLE_REGISTRY: CityRegistry = {
@@ -195,7 +197,7 @@ describe('fetchPermitsNearby', () => {
             .rejects.toThrow('Socrata API error (Chicago): 500')
     })
 
-    it('orders results by issue_date DESC and limits to 200', async () => {
+    it('orders results by issue_date DESC and limits to 500', async () => {
         let capturedUrl = ''
         globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
             capturedUrl = typeof input === 'string' ? input : input.toString()
@@ -205,6 +207,77 @@ describe('fetchPermitsNearby', () => {
         await fetchPermitsNearby(41.8781, -87.6298, CHICAGO_REGISTRY)
 
         expect(capturedUrl).toContain('issue_date+DESC')
-        expect(capturedUrl).toContain('200')
+        expect(capturedUrl).toContain('500')
+    })
+
+    it('includes permit_status filter when registry has permit_status_values', async () => {
+        let capturedUrl = ''
+        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+            capturedUrl = typeof input === 'string' ? input : input.toString()
+            return new Response(JSON.stringify([]), { status: 200 })
+        }) as unknown as typeof fetch
+
+        await fetchPermitsNearby(41.8781, -87.6298, CHICAGO_REGISTRY)
+
+        const decoded = decodeURIComponent(capturedUrl).replaceAll('+', ' ')
+        expect(decoded).toContain("permit_status IN ('ACTIVE','PHASED PERMITTING')")
+    })
+
+    it('omits permit_status filter when registry has no permit_status_values', async () => {
+        let capturedUrl = ''
+        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+            capturedUrl = typeof input === 'string' ? input : input.toString()
+            return new Response(JSON.stringify([]), { status: 200 })
+        }) as unknown as typeof fetch
+
+        await fetchPermitsNearby(47.6, -122.33, SEATTLE_REGISTRY)
+
+        const decoded = decodeURIComponent(capturedUrl)
+        expect(decoded).not.toContain('permit_status')
+    })
+
+    it('omits permit_status filter when permit_status_values is empty array', async () => {
+        let capturedUrl = ''
+        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+            capturedUrl = typeof input === 'string' ? input : input.toString()
+            return new Response(JSON.stringify([]), { status: 200 })
+        }) as unknown as typeof fetch
+
+        const registryWithEmptyStatus: CityRegistry = {
+            ...CHICAGO_REGISTRY,
+            permit_status_values: [],
+        }
+
+        await fetchPermitsNearby(41.8781, -87.6298, registryWithEmptyStatus)
+
+        const decoded = decodeURIComponent(capturedUrl)
+        expect(decoded).not.toContain('permit_status IN')
+    })
+
+    it('normalizeRow maps permit_status when column exists in column_map', async () => {
+        const mockData = [
+            {
+                permit_: '99999',
+                permit_type: 'PERMIT - NEW CONSTRUCTION',
+                work_description: 'Test project',
+                reported_cost: '100000',
+                issue_date: '2026-03-01',
+                latitude: '41.88',
+                longitude: '-87.63',
+                street_number: '100',
+                street_name: 'TEST',
+                suffix: 'ST',
+                permit_status: 'ACTIVE',
+            },
+        ]
+
+        globalThis.fetch = vi.fn(async () => {
+            return new Response(JSON.stringify(mockData), { status: 200 })
+        }) as unknown as typeof fetch
+
+        const result = await fetchPermitsNearby(41.8781, -87.6298, CHICAGO_REGISTRY)
+
+        expect(result).toHaveLength(1)
+        expect(result[0].permit_status).toBe('ACTIVE')
     })
 })

@@ -150,18 +150,14 @@ export default function SearchForm({ onSearch, isLoading, initialValue }: Search
           autoComplete="off"
         />
         {isLoading && (
-          <div className="flex items-center gap-2" aria-hidden="true">
-            <div
-              className="w-1.5 h-1.5 rounded-full animate-pulse"
-              style={{ backgroundColor: 'var(--accent-primary)' }}
-            />
-            <span
-              className="text-[10px] font-semibold uppercase tracking-wider animate-pulse"
-              style={{ color: 'var(--accent-primary)' }}
-            >
-              Searching…
-            </span>
-          </div>
+          <div
+            className="w-3.5 h-3.5 shrink-0 rounded-full animate-spin"
+            aria-hidden="true"
+            style={{
+              border: '2px solid rgba(10, 158, 142, 0.2)',
+              borderTopColor: 'var(--accent-primary)',
+            }}
+          />
         )}
       </div>
 

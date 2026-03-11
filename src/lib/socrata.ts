@@ -52,6 +52,7 @@ export interface NormalizedRawPermit {
   street_direction?: string
   street_name?: string
   suffix?: string
+  permit_status?: string
 }
 
 // NOTE(Agent): Keep the old RawPermit type as an alias for backward
@@ -96,11 +97,19 @@ export async function fetchPermitsNearby(
   if (permit_type_filter) {
     whereParts.push(permit_type_filter)
   }
+  // NOTE(Agent): Filter to active permits when the registry has status config.
+  // Values come from our Supabase DB (permit_status_values), not user input.
+  if (column_map.permit_status && registry.permit_status_values?.length) {
+    const statusIn = registry.permit_status_values
+      .map((s) => `'${s}'`)
+      .join(',')
+    whereParts.push(`${column_map.permit_status} IN (${statusIn})`)
+  }
 
   const params = new URLSearchParams({
     $where: whereParts.join(' AND '),
     $order: `${column_map.issue_date} DESC`,
-    $limit: '200',
+    $limit: '500',
   })
 
   const url = `${base}?${params}`
@@ -171,6 +180,9 @@ function normalizeRow(
     suffix: column_map.suffix
       ? String(row[column_map.suffix] ?? '')
       : undefined,
+    permit_status: column_map.permit_status
+      ? String(row[column_map.permit_status] ?? '')
+      : undefined,
   }
 }
 
@@ -215,6 +227,14 @@ export async function fetchPermitsFromSocrataNoGeo(
     `(${municipalityFilter})`,
     `${column_map.issue_date} IS NOT NULL`,
   ]
+  // NOTE(Agent): Same status filter as fetchPermitsNearby — filter to active
+  // permits when the registry has status config.
+  if (column_map.permit_status && registry.permit_status_values?.length) {
+    const statusIn = registry.permit_status_values
+      .map((s: string) => `'${s}'`)
+      .join(',')
+    whereParts.push(`${column_map.permit_status} IN (${statusIn})`)
+  }
 
   const params = new URLSearchParams({
     $where: whereParts.join(' AND '),

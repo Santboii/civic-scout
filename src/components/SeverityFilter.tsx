@@ -7,6 +7,8 @@ interface SeverityFilterProps {
     value: PermitSeverity
     onChange: (severity: PermitSeverity) => void
     counts: Record<PermitSeverity, number>
+    /** Override the default "Impact Filter" header label */
+    label?: string
 }
 
 const STOPS: { severity: PermitSeverity; label: string; color: string }[] = [
@@ -15,7 +17,7 @@ const STOPS: { severity: PermitSeverity; label: string; color: string }[] = [
     { severity: 'red', label: 'High', color: 'var(--status-red)' },
 ]
 
-function SeverityFilter({ value, onChange, counts }: SeverityFilterProps) {
+function SeverityFilter({ value, onChange, counts, label = 'Impact Filter' }: SeverityFilterProps) {
     const activeIndex = STOPS.findIndex((s) => s.severity === value)
 
     // Count of permits currently shown at each threshold
@@ -40,7 +42,7 @@ function SeverityFilter({ value, onChange, counts }: SeverityFilterProps) {
                     style={{ color: 'var(--text-muted)' }}
                     id="severity-filter-label"
                 >
-                    Impact Filter
+                    {label}
                 </span>
                 <span
                     className="text-[10px] font-semibold tabular-nums"

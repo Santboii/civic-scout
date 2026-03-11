@@ -24,6 +24,7 @@ export interface ColumnMap {
     street_direction?: string
     street_name?: string
     suffix?: string
+    permit_status?: string  // Column name for status filtering (e.g., 'permit_status')
 }
 
 export interface CityRegistry {
@@ -42,6 +43,7 @@ export interface CityRegistry {
     enabled: boolean
     data_source_type: 'socrata' | 'arcgis' | 'arcgis_no_geo' | 'socrata_no_geo'
     arcgis_url: string | null
+    permit_status_values?: string[]  // Statuses considered "active" (e.g., ['ACTIVE', 'PHASED PERMITTING'])
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -142,5 +144,8 @@ function mapRow(row: Record<string, unknown>): CityRegistry {
         enabled: (row.enabled as boolean) ?? true,
         data_source_type: (row.data_source_type as 'socrata' | 'arcgis' | 'arcgis_no_geo' | 'socrata_no_geo') ?? 'socrata',
         arcgis_url: (row.arcgis_url as string) ?? null,
+        // NOTE(Agent): permit_status_values is stored as a JSONB array in Supabase.
+        // Supabase returns it already parsed. Default to undefined if not set.
+        permit_status_values: (row.permit_status_values as string[]) ?? undefined,
     }
 }

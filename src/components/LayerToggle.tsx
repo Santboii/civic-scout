@@ -46,13 +46,23 @@ interface LayerToggleProps {
     onToggle: (layer: DataLayerType) => void
     counts: Partial<Record<DataLayerType, number>>
     loading: Partial<Record<DataLayerType, boolean>>
+    /** Whether building permit markers are visible on the map */
+    permitsVisible: boolean
+    /** Callback to toggle permit marker visibility */
+    onPermitsToggle: () => void
+    /** Number of permits currently loaded */
+    permitsCount?: number
+    /** Whether permits are currently loading */
+    permitsLoading?: boolean
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function LayerToggle({ enabledLayers, onToggle, counts, loading }: LayerToggleProps) {
+export default function LayerToggle({ enabledLayers, onToggle, counts, loading, permitsVisible, onPermitsToggle, permitsCount, permitsLoading }: LayerToggleProps) {
     const [expanded, setExpanded] = useState(false)
-    const enabledCount = enabledLayers.size
+    // NOTE(Agent): Permits count toward enabled total since they appear
+    // in the panel alongside data layers.
+    const enabledCount = enabledLayers.size + (permitsVisible ? 1 : 0)
 
     const handleToggle = useCallback(
         (layer: DataLayerType) => {
@@ -95,6 +105,52 @@ export default function LayerToggle({ enabledLayers, onToggle, counts, loading }
                         <X size={14} aria-hidden="true" />
                     </button>
                 </div>
+
+                {/* Permits toggle — rendered first, above data layers */}
+                <div className={styles.layerRow}>
+                    <div
+                        className={styles.layerIcon}
+                        style={{ backgroundColor: 'rgba(10, 158, 142, 0.08)' }}
+                        aria-hidden="true"
+                    >
+                        🏗️
+                    </div>
+                    <div className={styles.layerInfo}>
+                        <span className={styles.layerLabel}>
+                            Permits
+                            {(permitsLoading ?? false) && (
+                                <span
+                                    className={styles.layerSpinner}
+                                    style={{ color: 'var(--accent-primary, #0A9E8E)' }}
+                                    aria-label="Loading permits data"
+                                />
+                            )}
+                            {!(permitsLoading ?? false) && permitsVisible && permitsCount !== undefined && (
+                                <span className={styles.layerCount}>{permitsCount}</span>
+                            )}
+                        </span>
+                    </div>
+                    <label
+                        className={styles.toggle}
+                        htmlFor="layer-toggle-permits"
+                    >
+                        <input
+                            id="layer-toggle-permits"
+                            className={styles.toggleInput}
+                            type="checkbox"
+                            role="switch"
+                            aria-checked={permitsVisible}
+                            aria-label="Toggle Permits layer"
+                            checked={permitsVisible}
+                            onChange={onPermitsToggle}
+                        />
+                        <span className={styles.toggleTrack} />
+                        <span className={styles.toggleKnob} />
+                    </label>
+                </div>
+
+                {/* Divider between permits and data layers */}
+                <div style={{ height: '1px', backgroundColor: 'var(--border-glass, rgba(255,255,255,0.06))', margin: '2px 0' }} />
 
                 {LAYERS.map((layer) => {
                     const isEnabled = enabledLayers.has(layer.type)

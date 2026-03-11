@@ -12,6 +12,9 @@ import PermitDetailModal from '@/components/PermitDetailModal'
 import LayerToggle from '@/components/LayerToggle'
 import DataLayerList from '@/components/DataLayerList'
 import DataLayerDetailModal from '@/components/DataLayerDetailModal'
+import SidebarTabs from '@/components/SidebarTabs'
+import type { SidebarTab } from '@/components/SidebarTabs'
+import { Building2, BarChart3 } from 'lucide-react'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
 import type { PermitSeverity } from '@/lib/permit-classifier'
 import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash } from '@/lib/data-layers'
@@ -39,6 +42,9 @@ function HomeContent() {
   const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
   const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
   const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null)
+  // NOTE(Agent): Controls map-only visibility of permit markers. Sidebar
+  // PermitList always shows permits regardless (Option A from design doc).
+  const [permitsVisible, setPermitsVisible] = useState(true)
 
   // ── Data Layer State ──────────────────────────────────────────────────
   const [enabledLayers, setEnabledLayers] = useState<Set<DataLayerType>>(new Set())
@@ -52,6 +58,7 @@ function HomeContent() {
   })
   const [selectedLayerItem, setSelectedLayerItem] = useState<DataLayerItem | null>(null)
   const [selectedLayerItemId, setSelectedLayerItemId] = useState<string | null>(null)
+  const [minLayerSeverity, setMinLayerSeverity] = useState<PermitSeverity>('green')
 
   // NOTE(Agent): Severity order used for filtering — 'green' shows all,
   // 'yellow' shows yellow+red, 'red' shows only red.
@@ -246,6 +253,13 @@ function HomeContent() {
     return items
   }, [enabledLayers, layerData])
 
+  // NOTE(Agent): Severity filtering for data layers, independent from permit
+  // severity. Uses the same SEVERITY_ORDER threshold logic.
+  const filteredDataLayerItems = useMemo(() => {
+    const threshold = SEVERITY_ORDER[minLayerSeverity]
+    return dataLayerItems.filter((item) => SEVERITY_ORDER[item.severity] >= threshold)
+  }, [dataLayerItems, minLayerSeverity, SEVERITY_ORDER])
+
   // Layer counts for the toggle panel
   const layerCounts: Partial<Record<DataLayerType, number>> = useMemo(() => {
     const counts: Partial<Record<DataLayerType, number>> = {}
@@ -345,13 +359,15 @@ function HomeContent() {
         {/* Map */}
         <div className="flex-1 min-h-[50vh] lg:min-h-0 relative">
           <Map
-            permits={filteredPermits}
+            permits={permitsVisible ? filteredPermits : []}
             center={mapCenter}
             onPermitSelect={setSelectedMapPermit}
             selectedPermitId={selectedPermitId}
             onPermitDeselect={() => setSelectedPermitId(null)}
             dataLayerItems={dataLayerItems}
             onDataLayerSelect={setSelectedLayerItem}
+            selectedDataLayerItemId={selectedLayerItemId}
+            onDataLayerDeselect={() => setSelectedLayerItemId(null)}
           />
           {/* Layer Toggle Panel — floating on the map */}
           {search && (
@@ -360,29 +376,28 @@ function HomeContent() {
               onToggle={handleLayerToggle}
               counts={layerCounts}
               loading={layerLoading}
+              permitsVisible={permitsVisible}
+              onPermitsToggle={() => setPermitsVisible((prev) => !prev)}
+              permitsCount={permits.length}
+              permitsLoading={loading}
             />
           )}
           {loading && (
             <div
-              className="absolute inset-0 flex items-center justify-center z-20"
-              style={{ backgroundColor: 'rgba(250, 250, 247, 0.7)', backdropFilter: 'blur(4px)' }}
+              className="absolute top-0 left-0 right-0 z-20 overflow-hidden"
+              aria-live="polite"
+              aria-label="Loading permits"
+              style={{ height: '3px', backgroundColor: 'rgba(10, 158, 142, 0.1)' }}
             >
-              <div className="flex flex-col items-center gap-3">
-                <div
-                  className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin"
-                  style={{
-                    borderColor: 'var(--accent-primary)',
-                    borderTopColor: 'transparent',
-                    boxShadow: '0 0 16px rgba(10, 158, 142, 0.2)',
-                  }}
-                ></div>
-                <span
-                  className="text-[10px] font-semibold uppercase tracking-[0.2em]"
-                  style={{ color: 'var(--accent-primary)' }}
-                >
-                  Scanning permits…
-                </span>
-              </div>
+              <div
+                style={{
+                  width: '25%',
+                  height: '100%',
+                  backgroundColor: 'var(--accent-primary)',
+                  borderRadius: '0 2px 2px 0',
+                  animation: 'indeterminate 1.4s ease-in-out infinite',
+                }}
+              />
             </div>
           )}
         </div>
@@ -460,68 +475,109 @@ function HomeContent() {
               </div>
             )}
 
-            {permits.length > 0 && (
-              <SeverityFilter
-                value={minSeverity}
-                onChange={setMinSeverity}
-                counts={{
-                  green: permits.filter((p) => p.severity === 'green').length,
-                  yellow: permits.filter((p) => p.severity === 'yellow').length,
-                  red: permits.filter((p) => p.severity === 'red').length,
-                }}
-              />
-            )}
-
-            <PermitList
-              permits={filteredPermits}
-              selectedPermitId={selectedPermitId}
-              onPermitClick={(permit) => {
-                // NOTE(Agent): Toggle behaviour — clicking the same card
-                // again deselects it. Map handles flyTo/popup via prop.
-                setSelectedPermitId((prev) =>
-                  prev === permit.id ? null : permit.id
-                )
-              }}
-              onViewDetails={(permit) => setSelectedMapPermit(permit)}
+            {/* NOTE(Agent): SidebarTabs replaces the previous linear stack of
+               SeverityFilter → PermitList → Neighborhood Activity. This solves
+               the scroll-depth problem where Activity was buried ~40k px down.
+               Tabs are defined inline so they pick up the latest state from
+               closure without extra prop-passing. */}
+            <SidebarTabs
+              tabs={[
+                {
+                  id: 'permits',
+                  label: 'Permits',
+                  icon: Building2,
+                  badge: filteredPermits.length,
+                  content: (
+                    <>
+                      {permits.length > 0 && (
+                        <SeverityFilter
+                          value={minSeverity}
+                          onChange={setMinSeverity}
+                          counts={{
+                            green: permits.filter((p) => p.severity === 'green').length,
+                            yellow: permits.filter((p) => p.severity === 'yellow').length,
+                            red: permits.filter((p) => p.severity === 'red').length,
+                          }}
+                        />
+                      )}
+                      <PermitList
+                        permits={filteredPermits}
+                        selectedPermitId={selectedPermitId}
+                        onPermitClick={(permit) => {
+                          // NOTE(Agent): Toggle behaviour — clicking the same card
+                          // again deselects it. Map handles flyTo/popup via prop.
+                          // Also clears data layer selection for mutual exclusion.
+                          // Auto-enables permits on the map if hidden, so the
+                          // flyTo/popup interaction always works.
+                          if (!permitsVisible) setPermitsVisible(true)
+                          setSelectedPermitId((prev) =>
+                            prev === permit.id ? null : permit.id
+                          )
+                          setSelectedLayerItemId(null)
+                        }}
+                        onViewDetails={(permit) => setSelectedMapPermit(permit)}
+                      />
+                    </>
+                  ),
+                },
+                {
+                  id: 'activity',
+                  label: 'Activity',
+                  icon: BarChart3,
+                  badge: filteredDataLayerItems.length > 0 ? filteredDataLayerItems.length : undefined,
+                  content: enabledLayers.size > 0 ? (
+                    <>
+                      <SeverityFilter
+                        label="Severity Filter"
+                        value={minLayerSeverity}
+                        onChange={setMinLayerSeverity}
+                        counts={{
+                          green: dataLayerItems.filter((i) => i.severity === 'green').length,
+                          yellow: dataLayerItems.filter((i) => i.severity === 'yellow').length,
+                          red: dataLayerItems.filter((i) => i.severity === 'red').length,
+                        }}
+                      />
+                      <DataLayerList
+                        items={filteredDataLayerItems}
+                        enabledLayers={enabledLayers}
+                        selectedItemId={selectedLayerItemId}
+                        onItemClick={(item) => {
+                          // NOTE(Agent): Toggle behaviour — same as permits.
+                          // Also clears permit selection for mutual exclusion.
+                          setSelectedLayerItemId((prev) =>
+                            prev === item.id ? null : item.id
+                          )
+                          setSelectedPermitId(null)
+                        }}
+                        onViewDetails={(item) => setSelectedLayerItem(item)}
+                      />
+                    </>
+                  ) : (
+                    <div
+                      className="text-center py-12 px-6 rounded-xl border border-dashed"
+                      style={{ borderColor: 'var(--border-strong)' }}
+                    >
+                      <span className="text-2xl block mb-3" style={{ opacity: 0.7 }}>📊</span>
+                      <p
+                        className="text-xs font-semibold mb-1"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        No activity layers enabled
+                      </p>
+                      <p
+                        className="text-[10px] leading-relaxed"
+                        style={{ color: 'var(--text-muted)', marginBottom: 0 }}
+                      >
+                        Toggle on Crime, Violations, or Crashes via the
+                        <strong> Layers</strong> button on the map to see
+                        neighborhood activity here.
+                      </p>
+                    </div>
+                  ),
+                },
+              ] satisfies SidebarTab[]}
+              defaultTab="permits"
             />
-
-            {/* Neighborhood Activity — data layers with severity */}
-            {enabledLayers.size > 0 && (
-              <details className="mt-4 pt-4 border-t group" style={{ borderTopColor: 'var(--border-glass)' }} open>
-                <summary
-                  className="flex items-center justify-between cursor-pointer list-none select-none"
-                  style={{ outline: 'none' }}
-                >
-                  <span
-                    className="text-[9px] font-semibold uppercase tracking-[0.25em]"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    Neighborhood Activity
-                  </span>
-                  <span
-                    className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: 'rgba(10, 158, 142, 0.08)',
-                      color: 'var(--accent-primary)',
-                      border: '1px solid rgba(10, 158, 142, 0.15)',
-                    }}
-                  >
-                    {dataLayerItems.length} nearby
-                  </span>
-                </summary>
-                <DataLayerList
-                  items={dataLayerItems}
-                  enabledLayers={enabledLayers}
-                  selectedItemId={selectedLayerItemId}
-                  onItemClick={(item) => {
-                    setSelectedLayerItemId((prev) =>
-                      prev === item.id ? null : item.id
-                    )
-                  }}
-                  onViewDetails={(item) => setSelectedLayerItem(item)}
-                />
-              </details>
-            )}
 
             {/* Data Attribution Footer */}
             <div className="mt-12 pt-8 border-t" style={{ borderTopColor: 'var(--border-strong)' }}>

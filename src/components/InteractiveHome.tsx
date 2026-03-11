@@ -267,28 +267,20 @@ function HomeContent() {
                     />
                     {loading && (
                         <div
-                            className="absolute inset-0 flex items-center justify-center z-20"
+                            className="absolute top-0 left-0 right-0 z-20 overflow-hidden"
                             aria-live="polite"
                             aria-label="Loading permits"
-                            style={{ backgroundColor: 'rgba(250, 250, 247, 0.7)', backdropFilter: 'blur(4px)' }}
+                            style={{ height: '3px', backgroundColor: 'rgba(10, 158, 142, 0.1)' }}
                         >
-                            <div className="flex flex-col items-center gap-3">
-                                <div
-                                    className="w-8 h-8 border-[3px] border-t-transparent rounded-full animate-spin"
-                                    aria-hidden="true"
-                                    style={{
-                                        borderColor: 'var(--accent-primary)',
-                                        borderTopColor: 'transparent',
-                                        boxShadow: '0 0 16px rgba(10, 158, 142, 0.2)',
-                                    }}
-                                ></div>
-                                <span
-                                    className="text-[10px] font-semibold uppercase tracking-[0.2em]"
-                                    style={{ color: 'var(--accent-primary)' }}
-                                >
-                                    Scanning permits…
-                                </span>
-                            </div>
+                            <div
+                                style={{
+                                    width: '25%',
+                                    height: '100%',
+                                    backgroundColor: 'var(--accent-primary)',
+                                    borderRadius: '0 2px 2px 0',
+                                    animation: 'indeterminate 1.4s ease-in-out infinite',
+                                }}
+                            />
                         </div>
                     )}
                 </div>

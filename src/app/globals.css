@@ -283,6 +283,18 @@ button:disabled {
   }
 }
 
+/* NOTE(Agent): Indeterminate progress bar — used for map loading overlay.
+   Replaces bulky full-screen spinner with a minimal top-edge bar (à la GitHub/YouTube). */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 .animate-fade-slide-up {
   animation: fadeSlideUp 0.4s ease-out both;
 }

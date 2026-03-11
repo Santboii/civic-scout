@@ -15,6 +15,8 @@ interface MapProps {
   onPermitDeselect?: () => void
   dataLayerItems?: DataLayerItem[]
   onDataLayerSelect?: (item: DataLayerItem) => void
+  selectedDataLayerItemId?: string | null
+  onDataLayerDeselect?: () => void
 }
 
 // NOTE(Agent): Hex values required for inline HTML Leaflet markers/popups
@@ -48,7 +50,7 @@ const LAYER_LABELS: Record<string, string> = {
 // parent state (selectedMapPermit, loading, showPayment, etc.).
 export default memo(Map)
 
-function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect, dataLayerItems = [], onDataLayerSelect }: MapProps) {
+function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDeselect, dataLayerItems = [], onDataLayerSelect, selectedDataLayerItemId, onDataLayerDeselect }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<globalThis.Map<string, L.Marker>>(new globalThis.Map())
@@ -56,7 +58,9 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
   // NOTE(Agent): Track the previously-selected ID so the lightweight selection effect
   // can restore the old marker's icon without rebuilding all markers.
   const prevSelectedIdRef = useRef<string | null>(null)
-  const layerMarkersRef = useRef<L.Marker[]>([])
+  // NOTE(Agent): Keyed by item ID so the flyTo effect can look up markers,
+  // mirroring how markersRef works for permits.
+  const layerMarkersRef = useRef<globalThis.Map<string, L.Marker>>(new globalThis.Map())
   // NOTE(Agent): Track whether the popupclose was triggered programmatically
   // (e.g. when opening a different marker's popup) vs. by user interaction.
   // Prevents spurious deselect calls during marker switches.
@@ -227,9 +231,11 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
 
     // NOTE(Agent): Listen for popup close events on the map to clear the
     // selected state in the parent. Suppressed during programmatic popup switches.
+    // Clears both permit and data layer selection — only one should be active.
     const handlePopupClose = () => {
       if (!suppressDeselectRef.current) {
         onPermitDeselect?.()
+        onDataLayerDeselect?.()
       }
     }
     map.on('popupclose', handlePopupClose)
@@ -253,7 +259,7 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
     // NOTE(Agent): selectedPermitId deliberately excluded — icon selection is
     // handled by the lightweight effect below to avoid full marker rebuilds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permits, center, createPermitIcon, onPermitSelect, onPermitDeselect])
+  }, [permits, center, createPermitIcon, onPermitSelect, onPermitDeselect, onDataLayerDeselect])
 
   // ── Data Layer Markers ──────────────────────────────────────────────────
   // NOTE(Agent): Separate effect for data layer markers. Rebuilds when
@@ -265,7 +271,7 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
 
     // Remove previous layer markers
     layerMarkersRef.current.forEach((m) => m.remove())
-    layerMarkersRef.current = []
+    layerMarkersRef.current = new globalThis.Map()
 
     dataLayerItems.forEach((item) => {
       // NOTE(Agent): Shape = type (diamond/square/triangle), Color = severity (red/yellow/green).
@@ -330,7 +336,7 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
         }, { once: true })
       })
 
-      layerMarkersRef.current.push(marker)
+      layerMarkersRef.current.set(item.id, marker)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataLayerItems, onDataLayerSelect])
@@ -391,6 +397,29 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
       suppressDeselectRef.current = false
     }, 650)
   }, [selectedPermitId])
+
+  // NOTE(Agent): Separate flyTo effect for data layer items, mirroring the
+  // permit flyTo effect above. Uses the same suppressDeselectRef to prevent
+  // spurious deselection when programmatically switching popups.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !selectedDataLayerItemId) return
+
+    const marker = layerMarkersRef.current.get(selectedDataLayerItemId)
+    if (!marker) return
+
+    suppressDeselectRef.current = true
+    map.closePopup()
+
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15), {
+      duration: 0.6,
+    })
+
+    setTimeout(() => {
+      marker.openPopup()
+      suppressDeselectRef.current = false
+    }, 650)
+  }, [selectedDataLayerItemId])
 
   return (
     <div
