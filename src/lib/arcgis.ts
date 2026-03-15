@@ -1,6 +1,6 @@
 import type { CityRegistry } from './city-registry'
 import type { NormalizedRawPermit } from './socrata'
-import { batchGeocode } from './census-geocoder'
+import { geocodeAddress } from './census-geocoder'
 import { haversineDistance } from './geo-utils'
 
 const DEFAULT_RADIUS_METERS = 8046 // ≈ 5 miles
@@ -110,7 +110,7 @@ export async function fetchPermitsFromArcGISNoGeo(
         where: whereParts.join(' AND '),
         outFields: buildOutFields(registry),
         orderByFields: `${registry.column_map.issue_date} DESC`,
-        resultRecordCount: '100',
+        resultRecordCount: '500',
         f: 'json',
     })
 
@@ -145,12 +145,16 @@ export async function fetchPermitsFromArcGISNoGeo(
         }))
         .filter((e) => e.address.length > 5) // Skip empty/tiny addresses
 
-    // Batch geocode
+    // NOTE(Agent): Geocode with a 45s timeout guard. With 500 records and 10
+    // concurrent geocodes, cold-cache geocoding takes ~50s. The 45s deadline
+    // ensures we return partial results before the 60s function timeout.
+    // On warm cache this completes in <2s so the guard never fires.
+    const GEOCODE_TIMEOUT_MS = 45_000
     const geocodeInput = addressEntries.map((e) => ({
         address: e.address,
         city: registry.city,
     }))
-    const geocoded = await batchGeocode(geocodeInput)
+    const geocoded = await timedBatchGeocode(geocodeInput, GEOCODE_TIMEOUT_MS)
 
     // Inject coordinates and filter by distance
     const permitAddressMap = new Map(
@@ -176,7 +180,7 @@ export async function fetchPermitsFromArcGISNoGeo(
         }
     }
 
-    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis-no-geo] ${registry.city}: ${results.length} permits within radius (of ${features.length} fetched)`)
+    if (process.env.NODE_ENV !== 'production') console.log(`[arcgis-no-geo] ${registry.city}: ${results.length} permits within radius (of ${features.length} fetched, ${geocoded.size} geocoded)`)
     return results
 }
 
@@ -290,4 +294,51 @@ function buildOutFields(registry: CityRegistry): string {
 
     // Fallback to * if no valid fields (shouldn't happen with a valid registry)
     return fields.size > 0 ? [...fields].join(',') : '*'
+}
+
+// ── Timed Geocoding ─────────────────────────────────────────────────────────
+
+/**
+ * Batch geocode with a deadline. Processes in chunks of MAX_CONCURRENT
+ * and checks the deadline between chunks. If time is up, returns the
+ * addresses geocoded so far — providing graceful degradation instead of
+ * a function timeout.
+ *
+ * NOTE(Agent): This exists because the arcgis_no_geo adapter geocodes up
+ * to 500 addresses inline. On cold cache, this can exceed the 60s function
+ * timeout. The deadline guard ensures partial results are returned.
+ */
+const GEOCODE_CONCURRENCY = 10
+
+async function timedBatchGeocode(
+    addresses: { address: string; city: string }[],
+    timeoutMs: number
+): Promise<Map<string, { lat: number | null; lon: number | null }>> {
+    const deadline = Date.now() + timeoutMs
+    const results = new Map<string, { lat: number | null; lon: number | null }>()
+
+    for (let i = 0; i < addresses.length; i += GEOCODE_CONCURRENCY) {
+        // Check deadline before starting a new batch
+        if (Date.now() >= deadline) {
+            console.warn(
+                `[arcgis-no-geo] Geocoding deadline reached after ${results.size}/${addresses.length} addresses — returning partial results`
+            )
+            break
+        }
+
+        const chunk = addresses.slice(i, i + GEOCODE_CONCURRENCY)
+        const chunkResults = await Promise.all(
+            chunk.map(({ address, city }) =>
+                geocodeAddress(address, city).then((result) => ({
+                    address,
+                    result,
+                }))
+            )
+        )
+        for (const { address, result } of chunkResults) {
+            results.set(address, result)
+        }
+    }
+
+    return results
 }

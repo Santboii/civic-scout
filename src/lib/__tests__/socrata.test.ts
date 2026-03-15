@@ -33,6 +33,9 @@ const CHICAGO_REGISTRY: CityRegistry = {
     data_source_type: 'socrata' as const,
     arcgis_url: null,
     permit_status_values: ['ACTIVE', 'PHASED PERMITTING'],
+    enrichment_type: 'cook_county_gis',
+    source_url: 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu',
+    last_verified_at: null,
 }
 
 const SEATTLE_REGISTRY: CityRegistry = {
@@ -59,6 +62,9 @@ const SEATTLE_REGISTRY: CityRegistry = {
     enabled: true,
     data_source_type: 'socrata' as const,
     arcgis_url: null,
+    enrichment_type: null,
+    source_url: null,
+    last_verified_at: null,
 }
 
 describe('fetchPermitsNearby', () => {

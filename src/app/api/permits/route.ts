@@ -7,7 +7,12 @@ import { verifyToken, extractToken } from '@/lib/auth'
 import { findAllCitiesByCoords } from '@/lib/city-registry'
 import { getServiceClient } from '@/lib/supabase'
 
-export const runtime = 'edge'
+// NOTE(Agent): Switched from 'edge' to 'nodejs' because no-geo adapters
+// (arcgis_no_geo, socrata_no_geo) batch-geocode up to 500 addresses on cold
+// cache, which can take ~50s — exceeding Edge's 25s timeout. Node.js Pro
+// supports maxDuration up to 300s. Cache-hit TTFB increases ~50ms (negligible).
+export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -68,7 +73,7 @@ export async function GET(request: NextRequest) {
       registries.map(async (registry) => {
         const raw = await fetchPermitsForCity(lat, lon, registry)
         return Promise.all(
-          raw.map((p) => transformPermit(p, registry.domain))
+          raw.map((p) => transformPermit(p, registry))
         )
       })
     )

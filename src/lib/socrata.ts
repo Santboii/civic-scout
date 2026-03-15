@@ -1,4 +1,4 @@
-import type { CityRegistry } from './city-registry'
+import type { CityRegistry, ColumnMap } from './city-registry'
 import { fetchPermitsFromArcGIS, fetchPermitsFromArcGISNoGeo } from './arcgis'
 import { batchGeocode } from './census-geocoder'
 import { redis, muniDiscoveryCacheKey, MUNI_DISCOVERY_CACHE_TTL_SECONDS } from './redis'
@@ -148,10 +148,11 @@ function normalizeRow(
 ): NormalizedRawPermit {
   const { column_map } = registry
 
-  // Handle nested location object (some datasets embed lat/lon inside a location field)
-  const locationObj = column_map.location
-    ? (row[column_map.location] as { latitude?: string; longitude?: string } | undefined)
-    : undefined
+  // NOTE(Agent): Extract lat/lon from multiple possible formats:
+  // 1. Separate columns (e.g., Seattle: latitude/longitude as numbers)
+  // 2. Socrata Location object: { latitude: "47.6", longitude: "-122.3" }
+  // 3. GeoJSON Point: { type: "Point", coordinates: [-122.3, 47.6] }
+  const { lat: extractedLat, lon: extractedLon } = extractLatLon(row, column_map)
 
   return {
     permit_id: String(row[column_map.permit_id] ?? ''),
@@ -159,12 +160,8 @@ function normalizeRow(
     work_description: String(row[column_map.work_description] ?? ''),
     reported_cost: String(row[column_map.reported_cost] ?? '0'),
     issue_date: String(row[column_map.issue_date] ?? ''),
-    latitude: String(
-      row[column_map.latitude] ?? locationObj?.latitude ?? '0'
-    ),
-    longitude: String(
-      row[column_map.longitude] ?? locationObj?.longitude ?? '0'
-    ),
+    latitude: extractedLat,
+    longitude: extractedLon,
     full_address: column_map.full_address
       ? String(row[column_map.full_address] ?? '')
       : undefined,
@@ -184,6 +181,48 @@ function normalizeRow(
       ? String(row[column_map.permit_status] ?? '')
       : undefined,
   }
+}
+
+// NOTE(Agent): Extracts lat/lon from a raw Socrata row, supporting three
+// location formats used across different city portals:
+//   1. Separate columns: { latitude: "47.6", longitude: "-122.3" }
+//   2. Socrata Location: { location: { latitude: "47.6", longitude: "-122.3" } }
+//   3. GeoJSON Point:    { location: { type: "Point", coordinates: [-122.3, 47.6] } }
+// Returns string values to match the NormalizedRawPermit interface.
+function extractLatLon(
+  row: RawPermitRow,
+  columnMap: ColumnMap
+): { lat: string; lon: string } {
+  // Priority 1: Direct columns (e.g., Seattle with separate lat/lon number fields)
+  if (columnMap.latitude && row[columnMap.latitude] != null) {
+    return {
+      lat: String(row[columnMap.latitude]),
+      lon: String(row[columnMap.longitude] ?? '0'),
+    }
+  }
+
+  // Priority 2 & 3: Nested location object
+  if (columnMap.location) {
+    const loc = row[columnMap.location] as Record<string, unknown> | undefined
+    if (loc && typeof loc === 'object') {
+      // GeoJSON Point: { type: "Point", coordinates: [lon, lat] }
+      if (loc.type === 'Point' && Array.isArray(loc.coordinates)) {
+        const coords = loc.coordinates as number[]
+        if (coords.length >= 2) {
+          return { lat: String(coords[1]), lon: String(coords[0]) }
+        }
+      }
+      // Socrata Location: { latitude: "47.6", longitude: "-122.3" }
+      if (loc.latitude != null) {
+        return {
+          lat: String(loc.latitude),
+          lon: String(loc.longitude ?? '0'),
+        }
+      }
+    }
+  }
+
+  return { lat: '0', lon: '0' }
 }
 
 // ── Socrata No-Geo Adapter ──────────────────────────────────────────────────

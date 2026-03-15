@@ -1,11 +1,13 @@
-// ── Chicago-Specific Data Layers ────────────────────────────────────────────
-// NOTE(Agent): Crime Incidents, Building Violations, and Traffic Crashes from
-// Chicago's Socrata portal. These are NOT routed through CityRegistry — they
-// are hardcoded to data.cityofchicago.org datasets. The API route gates on
-// isWithinChicago() so non-Chicago searches return empty arrays.
+// ── Multi-City Data Layers ──────────────────────────────────────────────────
+// NOTE(Agent): Refactored from Chicago-only to registry-based. Crime, violation,
+// and crash data are now fetched using DataLayerRegistry entries from Supabase,
+// just like permits use CityRegistry. The normalizer functions remain unchanged —
+// they parse raw Socrata rows into typed objects. Column mapping from the registry
+// is applied before normalization so each city's field names resolve correctly.
 
 import type { PermitSeverity } from './permit-classifier'
 import { classifyCrime, classifyViolation, classifyCrash } from './data-layer-classifier'
+import type { DataLayerRegistry, DataLayerColumnMap } from './data-layer-registry'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,33 +74,6 @@ export interface DataLayersResponse {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const RADIUS_METERS = 8046 // ≈ 5 miles (matches permits)
-const SOCRATA_DOMAIN = 'data.cityofchicago.org'
-
-// Dataset IDs
-const CRIMES_DATASET = 'ijzp-q8t2'
-const VIOLATIONS_DATASET = '22u3-xenr'
-const CRASHES_DATASET = '85ca-t3if'
-
-// NOTE(Agent): Chicago city limits bounding box. Used to gate data layer
-// fetching — these datasets are Chicago-only. Values are generous to
-// include edge neighborhoods (e.g., O'Hare).
-const CHICAGO_BBOX = {
-    latMin: 41.64,
-    latMax: 42.02,
-    lonMin: -87.94,
-    lonMax: -87.52,
-}
-
-// ── Chicago Bbox Check ──────────────────────────────────────────────────────
-
-export function isWithinChicago(lat: number, lon: number): boolean {
-    return (
-        lat >= CHICAGO_BBOX.latMin &&
-        lat <= CHICAGO_BBOX.latMax &&
-        lon >= CHICAGO_BBOX.lonMin &&
-        lon <= CHICAGO_BBOX.lonMax
-    )
-}
 
 // ── HTML Escaping ───────────────────────────────────────────────────────────
 
@@ -114,7 +89,27 @@ export function escapeHtml(str: string): string {
         .replace(/'/g, '&#39;')
 }
 
-// ── Fetchers ────────────────────────────────────────────────────────────────
+// ── Column Mapping ──────────────────────────────────────────────────────────
+
+// NOTE(Agent): Applies the registry's column_map to a raw Socrata row.
+// If the column_map has { "primary_type": "crime_category" }, then
+// row["crime_category"] becomes the value for "primary_type" in the normalized row.
+// Identity mappings (where key === value) are the common case for Chicago.
+// IMPORTANT: Only mapped fields are passed through. Unmapped Socrata fields are
+// dropped to prevent PII leakage into caches and logs.
+function applyColumnMap(row: SocrataRow, columnMap: DataLayerColumnMap): SocrataRow {
+    const mapped: SocrataRow = {}
+    for (const [normalizedKey, socrataKey] of Object.entries(columnMap)) {
+        mapped[normalizedKey] = row[socrataKey]
+    }
+    // NOTE(Agent): latitude/longitude are always needed by normalizers for geo filtering
+    // but may not be in every column_map since they're "always present" in Socrata responses.
+    if (!('latitude' in mapped) && row.latitude != null) mapped.latitude = row.latitude
+    if (!('longitude' in mapped) && row.longitude != null) mapped.longitude = row.longitude
+    return mapped
+}
+
+// ── Generic Fetcher ─────────────────────────────────────────────────────────
 
 type SocrataRow = Record<string, unknown>
 
@@ -126,121 +121,120 @@ function socrataHeaders(): Record<string, string> {
 }
 
 /**
- * Fetch crime incidents near a lat/lon from Chicago's Socrata portal.
- * Dataset: ijzp-q8t2 (Crimes - 2001 to Present)
+ * Generic Socrata fetcher for data layers. Builds URL from registry config.
+ * Supports two geo strategies:
+ * - 'point': within_circle() on a Socrata Point-type column
+ * - 'separate': bounding-box on separate lat/lon number columns
+ */
+async function fetchFromRegistry(
+    lat: number,
+    lon: number,
+    registry: DataLayerRegistry,
+    limit: number = 100
+): Promise<SocrataRow[]> {
+    // Build the geo filter based on geo_type
+    let geoClause: string
+    if (registry.geo_type === 'separate') {
+        // NOTE(Agent): Bounding-box fallback for datasets with separate lat/lon columns.
+        // Mirrors the logic in socrata.ts for permits.
+        const latDelta = RADIUS_METERS / 111_000
+        const lonDelta = RADIUS_METERS / (111_000 * Math.cos((lat * Math.PI) / 180))
+        const latCol = registry.column_map['latitude'] ?? 'latitude'
+        const lonCol = registry.column_map['longitude'] ?? 'longitude'
+        geoClause = [
+            `${latCol} > ${lat - latDelta}`,
+            `${latCol} < ${lat + latDelta}`,
+            `${lonCol} > ${lon - lonDelta}`,
+            `${lonCol} < ${lon + lonDelta}`,
+        ].join(' AND ')
+    } else {
+        geoClause = `within_circle(${registry.geo_column}, ${lat}, ${lon}, ${RADIUS_METERS})`
+    }
+
+    const params = new URLSearchParams({
+        $where: geoClause,
+        $order: registry.order_by,
+        $limit: String(limit),
+    })
+
+    const url = `https://${registry.domain}/resource/${registry.dataset_id}.json?${params}`
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`[data-layers] Fetching ${registry.layer_type} from ${registry.city}:`, url)
+    }
+
+    const res = await fetch(url, {
+        headers: socrataHeaders(),
+        next: { revalidate: 0 },
+    })
+
+    if (!res.ok) {
+        console.error(`[data-layers] ${registry.layer_type} error (${registry.city}):`, await res.text())
+        return []
+    }
+
+    const data: SocrataRow[] = await res.json()
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`[data-layers] ${registry.layer_type} results (${registry.city}):`, data.length)
+    }
+
+    return data
+}
+
+// ── Public Fetchers ─────────────────────────────────────────────────────────
+
+/**
+ * Fetch crime incidents near a lat/lon using a data layer registry.
  */
 export async function fetchCrimeIncidents(
     lat: number,
-    lon: number
+    lon: number,
+    registry: DataLayerRegistry
 ): Promise<CrimeIncident[]> {
     try {
-        const params = new URLSearchParams({
-            $where: `within_circle(location, ${lat}, ${lon}, ${RADIUS_METERS})`,
-            $order: 'date DESC',
-            $limit: '100',
-        })
-
-        const url = `https://${SOCRATA_DOMAIN}/resource/${CRIMES_DATASET}.json?${params}`
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Fetching crimes:', url)
-
-        const res = await fetch(url, {
-            headers: socrataHeaders(),
-            next: { revalidate: 0 },
-        })
-
-        if (!res.ok) {
-            console.error('[data-layers] Crimes error:', await res.text())
-            return []
-        }
-
-        const data: SocrataRow[] = await res.json()
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Crimes results:', data.length)
-
-        return data
-            .map(normalizeCrime)
+        const rawRows = await fetchFromRegistry(lat, lon, registry)
+        return rawRows
+            .map((row) => normalizeCrime(applyColumnMap(row, registry.column_map)))
             .filter((c): c is CrimeIncident => c !== null)
     } catch (err) {
-        console.error('[data-layers] Crimes fetch failed:', err)
+        console.error(`[data-layers] Crimes fetch failed (${registry.city}):`, err)
         return []
     }
 }
 
 /**
- * Fetch building violations near a lat/lon from Chicago's Socrata portal.
- * Dataset: 22u3-xenr (Building Violations)
+ * Fetch building violations near a lat/lon using a data layer registry.
  */
 export async function fetchBuildingViolations(
     lat: number,
-    lon: number
+    lon: number,
+    registry: DataLayerRegistry
 ): Promise<BuildingViolation[]> {
     try {
-        const params = new URLSearchParams({
-            $where: `within_circle(location, ${lat}, ${lon}, ${RADIUS_METERS})`,
-            $order: 'violation_date DESC',
-            $limit: '100',
-        })
-
-        const url = `https://${SOCRATA_DOMAIN}/resource/${VIOLATIONS_DATASET}.json?${params}`
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Fetching violations:', url)
-
-        const res = await fetch(url, {
-            headers: socrataHeaders(),
-            next: { revalidate: 0 },
-        })
-
-        if (!res.ok) {
-            console.error('[data-layers] Violations error:', await res.text())
-            return []
-        }
-
-        const data: SocrataRow[] = await res.json()
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Violations results:', data.length)
-
-        return data
-            .map(normalizeViolation)
+        const rawRows = await fetchFromRegistry(lat, lon, registry)
+        return rawRows
+            .map((row) => normalizeViolation(applyColumnMap(row, registry.column_map)))
             .filter((v): v is BuildingViolation => v !== null)
     } catch (err) {
-        console.error('[data-layers] Violations fetch failed:', err)
+        console.error(`[data-layers] Violations fetch failed (${registry.city}):`, err)
         return []
     }
 }
 
 /**
- * Fetch traffic crashes near a lat/lon from Chicago's Socrata portal.
- * Dataset: 85ca-t3if (Traffic Crashes)
+ * Fetch traffic crashes near a lat/lon using a data layer registry.
  */
 export async function fetchTrafficCrashes(
     lat: number,
-    lon: number
+    lon: number,
+    registry: DataLayerRegistry
 ): Promise<TrafficCrash[]> {
     try {
-        const params = new URLSearchParams({
-            $where: `within_circle(location, ${lat}, ${lon}, ${RADIUS_METERS})`,
-            $order: 'crash_date DESC',
-            $limit: '100',
-        })
-
-        const url = `https://${SOCRATA_DOMAIN}/resource/${CRASHES_DATASET}.json?${params}`
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Fetching crashes:', url)
-
-        const res = await fetch(url, {
-            headers: socrataHeaders(),
-            next: { revalidate: 0 },
-        })
-
-        if (!res.ok) {
-            console.error('[data-layers] Crashes error:', await res.text())
-            return []
-        }
-
-        const data: SocrataRow[] = await res.json()
-        if (process.env.NODE_ENV !== 'production') console.log('[data-layers] Crashes results:', data.length)
-
-        return data
-            .map(normalizeCrash)
+        const rawRows = await fetchFromRegistry(lat, lon, registry)
+        return rawRows
+            .map((row) => normalizeCrash(applyColumnMap(row, registry.column_map)))
             .filter((c): c is TrafficCrash => c !== null)
     } catch (err) {
-        console.error('[data-layers] Crashes fetch failed:', err)
+        console.error(`[data-layers] Crashes fetch failed (${registry.city}):`, err)
         return []
     }
 }

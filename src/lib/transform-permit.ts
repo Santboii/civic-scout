@@ -6,19 +6,19 @@
 import { enrichWithCookCounty } from './cook-county'
 import { classifyPermit, ClassifiedPermit } from './permit-classifier'
 import type { NormalizedRawPermit } from './socrata'
+import type { CityRegistry } from './city-registry'
 
 export type { ClassifiedPermit }
 
 /**
  * Transform a raw permit into a classified permit with enrichment.
  *
- * Applies classification (severity, community note, label),
- * Cook County GIS enrichment for red-severity permits,
- * and address normalization.
+ * Accepts a full CityRegistry so enrichment, source URLs, and domain
+ * are all derived from config — no hardcoded city checks.
  */
 export async function transformPermit(
     p: NormalizedRawPermit,
-    domain: string
+    registry: CityRegistry
 ): Promise<ClassifiedPermit> {
     const lat = parseFloat(p.latitude ?? '0')
     const lon = parseFloat(p.longitude ?? '0')
@@ -28,11 +28,11 @@ export async function transformPermit(
         reported_cost: p.reported_cost,
     })
 
-    // NOTE(Agent): Cook County enrichment works for any Cook County domain,
-    // including Chicago's Socrata portal and the Assessor's suburban dataset.
-    const isCookCounty = domain === 'data.cityofchicago.org' || domain === 'datacatalog.cookcountyil.gov'
+    // NOTE(Agent): Enrichment is now driven by registry.enrichment_type instead
+    // of hardcoded domain checks. This allows any future enrichment adapters to
+    // be added without code changes — just set the column in Supabase.
     let zoningClassification: string | null = null
-    if (severity === 'red' && lat && lon && isCookCounty) {
+    if (severity === 'red' && lat && lon && registry.enrichment_type === 'cook_county_gis') {
         const enriched = await enrichWithCookCounty(lat, lon)
         zoningClassification = enriched?.zoning_classification ?? null
     }
@@ -59,6 +59,8 @@ export async function transformPermit(
         severity_reason: reason,
         community_note: communityNote,
         zoning_classification: zoningClassification,
+        source_url: registry.source_url,
+        source_domain: registry.domain,
     }
 }
 

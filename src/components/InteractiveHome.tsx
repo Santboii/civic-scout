@@ -405,9 +405,13 @@ function HomeContent() {
                             </h3>
                             <div className="space-y-3">
                                 <a
-                                    href={cityName === 'Chicago'
-                                        ? 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu'
-                                        : '#'
+                                    href={
+                                        // NOTE(Agent): Derive source URL from permits data.
+                                        // First permit's source_url is most representative.
+                                        permits[0]?.source_url
+                                        || (cityName === 'Chicago'
+                                            ? 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu'
+                                            : undefined)
                                     }
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -489,6 +493,7 @@ function HomeContent() {
                 <PermitDetailModal
                     permit={selectedMapPermit}
                     onClose={() => setSelectedMapPermit(null)}
+                    cityName={cityName || 'Unknown City'}
                 />
             )}
         </main>

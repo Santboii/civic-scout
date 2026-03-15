@@ -42,7 +42,7 @@ const securityHeaders = [
         "https://checkout.stripe.com",
         // CartoDB raster map tiles
         "https://*.basemaps.cartocdn.com",
-        // Chicago open data (Socrata)
+        // Socrata open data portals (server-side only; listed for documentation)
         "https://data.cityofchicago.org",
         // Cook County GIS (zoning enrichment)
         "https://gisapps.cookcountyil.gov",

@@ -8,7 +8,6 @@ import {
 } from '@/lib/redis'
 import { verifyToken, extractToken } from '@/lib/auth'
 import {
-    isWithinChicago,
     fetchCrimeIncidents,
     fetchBuildingViolations,
     fetchTrafficCrashes,
@@ -17,6 +16,7 @@ import {
     type TrafficCrash,
     type DataLayerType,
 } from '@/lib/data-layers'
+import { findDataLayersByCoords } from '@/lib/data-layer-registry'
 
 export const runtime = 'edge'
 
@@ -24,13 +24,7 @@ export const runtime = 'edge'
 // strings from reaching the fetch dispatchers or cache keys.
 const VALID_LAYERS = new Set<DataLayerType>(['crimes', 'violations', 'crashes'])
 
-type LayerFetcher = (lat: number, lon: number) => Promise<CrimeIncident[] | BuildingViolation[] | TrafficCrash[]>
-
-const LAYER_FETCHERS: Record<DataLayerType, LayerFetcher> = {
-    crimes: fetchCrimeIncidents,
-    violations: fetchBuildingViolations,
-    crashes: fetchTrafficCrashes,
-}
+type LayerResult = CrimeIncident[] | BuildingViolation[] | TrafficCrash[]
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
@@ -67,38 +61,64 @@ export async function GET(request: NextRequest) {
         }
     }
 
-    // Chicago-only gate
-    if (!isWithinChicago(lat, lon)) {
-        // NOTE(Agent): Return empty layers object — not an error. Non-Chicago
-        // searches just don't have these data layers available.
+    // NOTE(Agent): Replaced isWithinChicago() gate with registry lookup.
+    // If no registries match this coordinate, return empty — same behavior
+    // as before but now city-agnostic.
+    const registries = await findDataLayersByCoords(lat, lon)
+    if (registries.length === 0) {
         return NextResponse.json(
             {},
             { headers: { 'Cache-Control': 'private, max-age=300' } }
         )
     }
 
+    // Build a map of layer_type → registry for quick lookup
+    const registryByLayer = new Map(registries.map((r) => [r.layer_type, r]))
+
     // Fetch each requested layer (cache-first, parallel)
     const results = await Promise.allSettled(
         requestedLayers.map(async (layer) => {
-            const cacheKey = dataLayersCacheKey(lat, lon, layer)
+            const registry = registryByLayer.get(layer)
+            if (!registry) {
+                // No registry for this layer at this location — return empty
+                return { layer, data: [] as unknown[], source: 'unsupported', sourceUrl: null, sourceLabel: null }
+            }
+
+            const cacheKey = dataLayersCacheKey(lat, lon, layer, registry.domain)
 
             // Try primary cache
             try {
-                const cached = await redis.get<CrimeIncident[] | BuildingViolation[] | TrafficCrash[]>(cacheKey)
+                const cached = await redis.get<LayerResult>(cacheKey)
                 if (cached) {
-                    return { layer, data: cached, source: 'cache' }
+                    return {
+                        layer,
+                        data: cached,
+                        source: 'cache',
+                        sourceUrl: registry.source_url,
+                        sourceLabel: registry.source_label,
+                    }
                 }
             } catch {
                 // Redis unavailable — fall through to live fetch
             }
 
-            // Live fetch
-            const fetcher = LAYER_FETCHERS[layer]
-            const data = await fetcher(lat, lon)
+            // Live fetch using registry
+            let data: LayerResult
+            switch (layer) {
+                case 'crimes':
+                    data = await fetchCrimeIncidents(lat, lon, registry)
+                    break
+                case 'violations':
+                    data = await fetchBuildingViolations(lat, lon, registry)
+                    break
+                case 'crashes':
+                    data = await fetchTrafficCrashes(lat, lon, registry)
+                    break
+            }
 
             // Cache results (primary + stale fallback)
             try {
-                const staleKey = dataLayersStaleCacheKey(lat, lon, layer)
+                const staleKey = dataLayersStaleCacheKey(lat, lon, layer, registry.domain)
                 await Promise.all([
                     redis.set(cacheKey, data, { ex: DATA_LAYERS_CACHE_TTL_SECONDS }),
                     redis.set(staleKey, data, { ex: DATA_LAYERS_STALE_TTL_SECONDS }),
@@ -107,26 +127,39 @@ export async function GET(request: NextRequest) {
                 // Redis unavailable — result still returned, just not cached
             }
 
-            return { layer, data, source: 'live' }
+            return {
+                layer,
+                data,
+                source: 'live',
+                sourceUrl: registry.source_url,
+                sourceLabel: registry.source_label,
+            }
         })
     )
 
     // Assemble response with per-layer source metadata
-    const response: Record<string, { data: unknown[]; source: string }> = {}
+    const response: Record<string, { data: unknown[]; source: string; sourceUrl?: string | null; sourceLabel?: string | null }> = {}
 
-    for (const result of results) {
+    for (const [i, result] of results.entries()) {
         if (result.status === 'fulfilled') {
-            const { layer, data, source } = result.value
-            response[layer] = { data, source }
+            const { layer, data, source, sourceUrl, sourceLabel } = result.value
+            response[layer] = { data, source, sourceUrl, sourceLabel }
         } else {
             // Fetch failed — try stale cache before giving up
-            const failedLayer = requestedLayers[results.indexOf(result)]
+            const failedLayer = requestedLayers[i]
+            const failedRegistry = failedLayer ? registryByLayer.get(failedLayer) : null
             if (failedLayer) {
                 try {
-                    const staleKey = dataLayersStaleCacheKey(lat, lon, failedLayer)
+                    const domain = failedRegistry?.domain ?? 'unknown'
+                    const staleKey = dataLayersStaleCacheKey(lat, lon, failedLayer, domain)
                     const stale = await redis.get<unknown[]>(staleKey)
                     if (stale) {
-                        response[failedLayer] = { data: stale, source: 'stale' }
+                        response[failedLayer] = {
+                            data: stale,
+                            source: 'stale',
+                            sourceUrl: failedRegistry?.source_url,
+                            sourceLabel: failedRegistry?.source_label,
+                        }
                         continue
                     }
                 } catch {

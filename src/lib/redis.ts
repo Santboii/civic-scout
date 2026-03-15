@@ -55,12 +55,12 @@ export const MUNI_DISCOVERY_CACHE_TTL_SECONDS = MUNI_DISCOVERY_CACHE_TTL
 const DATA_LAYERS_CACHE_TTL = 2 * 60 * 60 // 2 hours
 const DATA_LAYERS_STALE_TTL = 7 * 24 * 60 * 60 // 7 days
 
-export function dataLayersCacheKey(lat: number, lon: number, layer: string): string {
-  return `layers:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
+export function dataLayersCacheKey(lat: number, lon: number, layer: string, domain: string): string {
+  return `layers:${domain}:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
 }
 
-export function dataLayersStaleCacheKey(lat: number, lon: number, layer: string): string {
-  return `layers_stale:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
+export function dataLayersStaleCacheKey(lat: number, lon: number, layer: string, domain: string): string {
+  return `layers_stale:${domain}:${layer}:${lat.toFixed(4)}:${lon.toFixed(4)}`
 }
 
 export const DATA_LAYERS_CACHE_TTL_SECONDS = DATA_LAYERS_CACHE_TTL

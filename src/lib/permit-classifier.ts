@@ -15,6 +15,10 @@ export interface ClassifiedPermit {
   community_note: string
   // Optional Cook County enrichment
   zoning_classification?: string | null
+  // NOTE(Agent): Multi-city fields. source_url is the human-readable portal page;
+  // source_domain is the Socrata domain for building API links.
+  source_url?: string | null
+  source_domain?: string | null
 }
 
 // ── Impact category keyword maps ────────────────────────────────────────────

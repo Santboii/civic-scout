@@ -343,7 +343,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
         {/* Footer Actions */}
         <div className="p-6 pt-0 mt-auto">
           <a
-            href={`https://data.cityofchicago.org/resource/ydr8-5enu?permit_=${permit.id}`}
+            href={permit.source_url || `https://${permit.source_domain || 'data.cityofchicago.org'}/resource/${permit.id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
@@ -368,7 +368,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
             className="text-center text-[10px] mt-4 uppercase tracking-wider font-semibold"
             style={{ color: 'var(--text-muted)' }}
           >
-            Permit ID: {permit.id} • Data provided by City of Chicago
+            Permit ID: {permit.id} • Data provided by {cityName || 'Open Data Portal'}
           </p>
         </div>
       </div>

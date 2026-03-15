@@ -44,6 +44,11 @@ export interface CityRegistry {
     data_source_type: 'socrata' | 'arcgis' | 'arcgis_no_geo' | 'socrata_no_geo'
     arcgis_url: string | null
     permit_status_values?: string[]  // Statuses considered "active" (e.g., ['ACTIVE', 'PHASED PERMITTING'])
+    // NOTE(Agent): Multi-city expansion fields. enrichment_type replaces hardcoded
+    // domain checks in transform-permit.ts. source_url powers frontend "View Source" links.
+    enrichment_type: string | null
+    source_url: string | null
+    last_verified_at: string | null
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -147,5 +152,8 @@ function mapRow(row: Record<string, unknown>): CityRegistry {
         // NOTE(Agent): permit_status_values is stored as a JSONB array in Supabase.
         // Supabase returns it already parsed. Default to undefined if not set.
         permit_status_values: (row.permit_status_values as string[]) ?? undefined,
+        enrichment_type: (row.enrichment_type as string) ?? null,
+        source_url: (row.source_url as string) ?? null,
+        last_verified_at: (row.last_verified_at as string) ?? null,
     }
 }

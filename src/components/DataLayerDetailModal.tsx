@@ -9,6 +9,10 @@ import type { PermitSeverity } from '@/lib/permit-classifier'
 interface DataLayerDetailModalProps {
     item: DataLayerItem
     onClose: () => void
+    // NOTE(Agent): Dynamic source data from API response. Falls back to
+    // hardcoded LAYER_CONFIG values (Chicago) when not provided.
+    sourceUrl?: string | null
+    sourceLabel?: string | null
 }
 
 // ── Layer Config ────────────────────────────────────────────────────────────
@@ -45,8 +49,11 @@ const LAYER_CONFIG = {
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function DataLayerDetailModal({ item, onClose }: DataLayerDetailModalProps) {
+export default function DataLayerDetailModal({ item, onClose, sourceUrl, sourceLabel }: DataLayerDetailModalProps) {
     const config = LAYER_CONFIG[item.layerType]
+    // NOTE(Agent): API-provided source info takes precedence over hardcoded config.
+    const resolvedSourceUrl = sourceUrl || config.sourceUrl
+    const resolvedSourceLabel = sourceLabel || config.sourceLabel
     const dialogRef = useRef<HTMLDivElement>(null)
     const closeBtnRef = useRef<HTMLButtonElement>(null)
     const headingId = useId()
@@ -146,7 +153,7 @@ export default function DataLayerDetailModal({ item, onClose }: DataLayerDetailM
                 {/* Footer */}
                 <div className="p-6 pt-0 mt-auto">
                     <a
-                        href={config.sourceUrl}
+                        href={resolvedSourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
@@ -162,7 +169,7 @@ export default function DataLayerDetailModal({ item, onClose }: DataLayerDetailM
                         className="text-center text-[10px] mt-4 uppercase tracking-wider font-semibold"
                         style={{ color: 'var(--text-muted)' }}
                     >
-                        {config.sourceLabel} • City of Chicago Open Data
+                        {resolvedSourceLabel} • Open Data
                     </p>
                 </div>
             </div>

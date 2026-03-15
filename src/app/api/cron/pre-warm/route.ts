@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
           registries.map(async (registry) => {
             const raw = await fetchPermitsForCity(spot.lat, spot.lon, registry)
             return Promise.all(
-              raw.map((p: NormalizedRawPermit) => transformPermit(p, registry.domain))
+              raw.map((p: NormalizedRawPermit) => transformPermit(p, registry))
             )
           })
         )

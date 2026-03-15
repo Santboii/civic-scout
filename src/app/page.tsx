@@ -59,6 +59,9 @@ function HomeContent() {
   const [selectedLayerItem, setSelectedLayerItem] = useState<DataLayerItem | null>(null)
   const [selectedLayerItemId, setSelectedLayerItemId] = useState<string | null>(null)
   const [minLayerSeverity, setMinLayerSeverity] = useState<PermitSeverity>('green')
+  // NOTE(Agent): Per-layer source metadata from the API response. Used to pass
+  // dynamic sourceUrl/sourceLabel to DataLayerDetailModal instead of hardcoded Chicago values.
+  const [layerSourceMeta, setLayerSourceMeta] = useState<Record<string, { sourceUrl?: string | null; sourceLabel?: string | null }>>({})
 
   // NOTE(Agent): Severity order used for filtering — 'green' shows all,
   // 'yellow' shows yellow+red, 'red' shows only red.
@@ -175,6 +178,7 @@ function HomeContent() {
     }
   }, [search, token, fetchPermits])
 
+
   // ── Data Layer Fetching ───────────────────────────────────────────────
   // NOTE(Agent): Lazy-fetch — only fetches when a layer is enabled AND we
   // have an active search + token. Layers are fetched independently.
@@ -200,13 +204,24 @@ function HomeContent() {
           return
         }
 
-        const data = await res.json() as Record<string, { data: DataLayerItem[] }>
+        const data = await res.json() as Record<string, { data: DataLayerItem[]; sourceUrl?: string | null; sourceLabel?: string | null }>
 
         setLayerData((prev) => {
           const next = { ...prev }
           if (data.crimes) next.crimes = data.crimes.data as CrimeIncident[]
           if (data.violations) next.violations = data.violations.data as BuildingViolation[]
           if (data.crashes) next.crashes = data.crashes.data as TrafficCrash[]
+          return next
+        })
+
+        // Store per-layer source metadata for DataLayerDetailModal
+        setLayerSourceMeta((prev) => {
+          const next = { ...prev }
+          for (const [layer, info] of Object.entries(data)) {
+            if (info.sourceUrl || info.sourceLabel) {
+              next[layer] = { sourceUrl: info.sourceUrl, sourceLabel: info.sourceLabel }
+            }
+          }
           return next
         })
       } catch (err) {
@@ -221,6 +236,18 @@ function HomeContent() {
     },
     []
   )
+
+  // NOTE(Agent): Re-fetch all currently-enabled data layers when the search
+  // location changes. Without this, toggling layers on for Location A and then
+  // searching for Location B would leave Location A's data on the map.
+  // enabledLayers intentionally excluded — handleLayerToggle handles toggle events.
+  useEffect(() => {
+    if (search && token && enabledLayers.size > 0) {
+      fetchDataLayers(search.lat, search.lon, token, [...enabledLayers])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, token, fetchDataLayers])
+
 
   // Trigger layer fetch when layers are toggled on
   const handleLayerToggle = useCallback(
@@ -272,6 +299,14 @@ function HomeContent() {
   function handleSearch(s: { address: string; lat: number; lon: number }) {
     setSearch(s)
     setPermits([])
+    // NOTE(Agent): Clear all stale state from the previous location so the UI
+    // doesn't flash old markers, modals, or sidebar highlights while the new
+    // data loads. Data layers are re-fetched by the useEffect below.
+    setLayerData({ crimes: [], violations: [], crashes: [] })
+    setSelectedPermitId(null)
+    setSelectedMapPermit(null)
+    setSelectedLayerItemId(null)
+    setSelectedLayerItem(null)
 
     // Update URL to persist search state
     const params = new URLSearchParams()
@@ -589,9 +624,12 @@ function HomeContent() {
               </h2>
               <div className="space-y-3">
                 <a
-                  href={cityName === 'Chicago'
-                    ? 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu'
-                    : '#'
+                  href={
+                    // NOTE(Agent): Derive from first permit's source_url, fall back to Chicago default.
+                    permits[0]?.source_url
+                    || (cityName === 'Chicago'
+                      ? 'https://data.cityofchicago.org/Buildings/Building-Permits/ydr8-5enu'
+                      : undefined)
                   }
                   target="_blank"
                   rel="noopener noreferrer"
@@ -693,6 +731,8 @@ function HomeContent() {
         <DataLayerDetailModal
           item={selectedLayerItem}
           onClose={() => setSelectedLayerItem(null)}
+          sourceUrl={layerSourceMeta[selectedLayerItem.layerType]?.sourceUrl}
+          sourceLabel={layerSourceMeta[selectedLayerItem.layerType]?.sourceLabel}
         />
       )}
     </main>
