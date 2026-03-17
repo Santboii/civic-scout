@@ -1,0 +1,238 @@
+/* ============================================
+   CityGrid — Available Cities Pill Layout
+   ============================================ */
+
+.section {
+    margin-top: 3rem;
+    width: 100%;
+    max-width: 720px;
+    text-align: center;
+    animation: fadeIn 0.6s ease-out both;
+    animation-delay: 0.55s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.sectionTitle {
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+/* === Pill Grid === */
+
+.grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    font-family: var(--font-inter);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--background-card);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    opacity: 0;
+    animation: pillFadeIn 0.4s ease-out forwards;
+}
+
+/* NOTE(Agent): Stagger delays are set inline via style prop for each pill.
+   This keyframe handles the actual fade animation. */
+@keyframes pillFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pill:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.pill:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+.pill:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.pillDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-green);
+    flex-shrink: 0;
+}
+
+.pillCity {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pillState {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+/* === Request CTA === */
+
+.cta {
+    margin-top: 1.25rem;
+}
+
+.ctaLink {
+    font-family: var(--font-inter);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent-text);
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    transition: color 0.2s ease;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.ctaLink:hover {
+    color: var(--accent-primary-hover);
+    text-decoration: underline;
+}
+
+.ctaArrow {
+    display: inline-block;
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+}
+
+.ctaLink:hover .ctaArrow {
+    transform: translateX(2px);
+}
+
+/* === Request Form (inline) === */
+
+.requestForm {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    animation: fadeIn 0.3s ease-out both;
+}
+
+.requestInput {
+    font-family: var(--font-inter);
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-strong);
+    background: var(--background-card);
+    color: var(--text-primary);
+    outline: none;
+    width: 200px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.requestInput::placeholder {
+    color: var(--text-muted);
+}
+
+.requestInput:focus {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-glow);
+}
+
+.requestButton {
+    font-family: var(--font-inter);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: var(--radius-lg);
+    border: none;
+    background: var(--accent-primary);
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.requestButton:hover {
+    background: var(--accent-primary-hover);
+    transform: translateY(-1px);
+}
+
+.requestButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.successMessage {
+    font-family: var(--font-inter);
+    font-size: 11px;
+    color: var(--status-green);
+    font-weight: 500;
+    margin-top: 0.75rem;
+    animation: fadeIn 0.3s ease-out both;
+}
+
+/* === Responsive === */
+
+@media (max-width: 640px) {
+    .section {
+        max-width: 320px;
+    }
+
+    .requestForm {
+        flex-direction: column;
+    }
+
+    .requestInput {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .section,
+    .pill {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .requestForm {
+        animation: none;
+    }
+}

@@ -13,7 +13,7 @@ import SearchForm from '@/components/SearchForm'
 import SeverityFilter from '@/components/SeverityFilter'
 import LandingHero from '@/components/LandingHero'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
-import type { PermitSeverity } from '@/lib/permit-classifier'
+import type { SeverityFilterValue } from '@/lib/permit-classifier'
 
 // NOTE(Agent): Lazy-load components only rendered after user interaction so they're
 // excluded from the initial client bundle, keeping the landing page lean.
@@ -52,14 +52,15 @@ function HomeContent() {
     const [dataSource, setDataSource] = useState<string>('')
     const [cityName, setCityName] = useState<string>('')
     const [unsupportedArea, setUnsupportedArea] = useState(false)
-    const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
+    const [minSeverity, setMinSeverity] = useState<SeverityFilterValue>('all')
     const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
     const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null)
     const [, startFilterTransition] = useTransition()
 
-    // NOTE(Agent): Severity order used for filtering — 'green' shows all,
-    // 'yellow' shows yellow+red, 'red' shows only red.
-    const SEVERITY_ORDER: Record<PermitSeverity, number> = useMemo(() => ({
+    // NOTE(Agent): Severity order used for filtering — 'all' shows everything,
+    // 'green' shows low+med+high, 'yellow' shows med+high, 'red' shows only high.
+    const SEVERITY_ORDER: Record<SeverityFilterValue, number> = useMemo(() => ({
+        all: -1,
         green: 0,
         yellow: 1,
         red: 2,
@@ -226,23 +227,34 @@ function HomeContent() {
                 />
                 <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <span
+                        <button
+                            onClick={() => {
+                                setSearch(null)
+                                setPermits([])
+                                setUnsupportedArea(false)
+                                router.push('/', { scroll: false })
+                            }}
                             className="text-2xl tracking-tight"
                             style={{
                                 color: 'var(--text-primary)',
-                                fontFamily: 'var(--font-display), Georgia, serif',
+                                fontFamily: 'var(--font-inter), system-ui, sans-serif',
                                 fontWeight: 700,
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
                             }}
+                            aria-label="Return to home page"
                         >
                             Civic<span style={{ color: 'var(--accent-primary)' }}>Scout</span>
-                        </span>
+                        </button>
                         <span
                             className="text-[9px] font-semibold uppercase tracking-[0.25em] px-2.5 py-1 rounded-full"
                             style={{
                                 backgroundColor: 'var(--accent-glow)',
                                 color: 'var(--accent-primary)',
                                 border: '1px solid rgba(10, 158, 142, 0.15)',
-                                fontFamily: 'var(--font-body)',
+                                fontFamily: 'var(--font-inter)',
                             }}
                         >
                             {cityName || 'Nationwide'}
@@ -306,12 +318,12 @@ function HomeContent() {
                                     >
                                         Searching near
                                     </span>
-                                    {permits.length > 0 && (
+                                    {filteredPermits.length > 0 && (
                                         <span
                                             className="text-[9px] font-semibold uppercase tracking-[0.15em]"
                                             style={{ color: 'var(--text-muted)' }}
                                         >
-                                            {permits.length} results
+                                            {filteredPermits.length} results
                                         </span>
                                     )}
                                 </div>

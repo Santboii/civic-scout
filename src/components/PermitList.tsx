@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, memo } from 'react'
+import { useState, useMemo, memo } from 'react'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
-import { AlertTriangle, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react'
+import { AlertTriangle, AlertCircle, CheckCircle, ExternalLink, Search } from 'lucide-react'
 
 interface PermitListProps {
   permits: ClassifiedPermit[]
@@ -40,6 +40,8 @@ const SEVERITY_CONFIG = {
 export default memo(PermitList)
 
 function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }: PermitListProps) {
+  const [searchQuery, setSearchQuery] = useState('')
+
   // NOTE(Agent): useMemo must be called unconditionally before any early returns to comply with
   // Rules of Hooks. When permits is empty the sorted array is also empty, which is fine.
   const sorted = useMemo(() => {
@@ -48,9 +50,27 @@ function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }:
       .sort((a, b) => order[a.severity] - order[b.severity])
       .map((p) => ({
         ...p,
-        _formattedDate: new Date(p.issue_date).toLocaleDateString(),
+        // NOTE(Agent): Defensive date formatting — some cities (e.g., Seattle)
+        // return empty issue_date values. Fallback to "Recent" instead of "Invalid Date".
+        _formattedDate: (() => {
+          const d = new Date(p.issue_date)
+          return isNaN(d.getTime()) ? 'Recent' : d.toLocaleDateString()
+        })(),
       }))
   }, [permits])
+
+  // NOTE(Agent): Client-side search filters permits by address, label, or community note.
+  // Case-insensitive substring match for fast, intuitive filtering.
+  const searchFiltered = useMemo(() => {
+    if (!searchQuery.trim()) return sorted
+    const q = searchQuery.toLowerCase()
+    return sorted.filter(
+      (p) =>
+        p.address.toLowerCase().includes(q) ||
+        p.permit_label.toLowerCase().includes(q) ||
+        (p.community_note && p.community_note.toLowerCase().includes(q))
+    )
+  }, [sorted, searchQuery])
 
   if (permits.length === 0) {
     return (
@@ -69,8 +89,41 @@ function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }:
   }
 
   return (
-    <ul className="space-y-3">
-      {sorted.map((permit, index) => {
+    <>
+      {/* Search Input */}
+      <div className="relative mb-3">
+        <Search
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: 'var(--text-muted)' }}
+          aria-hidden="true"
+        />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search permits by address or type…"
+          aria-label="Filter permits"
+          className="w-full text-xs py-2 pl-8 pr-3 rounded-lg outline-none transition-colors"
+          style={{
+            backgroundColor: 'var(--background-card)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-strong)',
+          }}
+
+        />
+      </div>
+
+      {searchFiltered.length === 0 ? (
+        <p
+          className="text-center text-xs py-6"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          No permits matching &ldquo;{searchQuery}&rdquo;
+        </p>
+      ) : (
+      <ul className="space-y-3">
+        {searchFiltered.map((permit, index) => {
         const config = SEVERITY_CONFIG[permit.severity]
         const Icon = config.icon
         const isSelected = permit.id === selectedPermitId
@@ -208,5 +261,7 @@ function PermitList({ permits, onPermitClick, onViewDetails, selectedPermitId }:
         )
       })}
     </ul>
+      )}
+    </>
   )
 }

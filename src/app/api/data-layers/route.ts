@@ -11,20 +11,22 @@ import {
     fetchCrimeIncidents,
     fetchBuildingViolations,
     fetchTrafficCrashes,
+    fetchServiceRequests,
     type CrimeIncident,
     type BuildingViolation,
     type TrafficCrash,
+    type ServiceRequest,
     type DataLayerType,
 } from '@/lib/data-layers'
-import { findDataLayersByCoords } from '@/lib/data-layer-registry'
+import { findDataLayersWithFallbacks } from '@/lib/data-layer-registry'
 
 export const runtime = 'edge'
 
 // NOTE(Agent): Valid layer names the client can request. Prevents arbitrary
 // strings from reaching the fetch dispatchers or cache keys.
-const VALID_LAYERS = new Set<DataLayerType>(['crimes', 'violations', 'crashes'])
+const VALID_LAYERS = new Set<DataLayerType>(['crimes', 'violations', 'crashes', 'service_requests'])
 
-type LayerResult = CrimeIncident[] | BuildingViolation[] | TrafficCrash[]
+type LayerResult = CrimeIncident[] | BuildingViolation[] | TrafficCrash[] | ServiceRequest[]
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
         .filter((l) => VALID_LAYERS.has(l))
 
     if (requestedLayers.length === 0) {
-        return NextResponse.json({ error: 'At least one valid layer required (crimes, violations, crashes)' }, { status: 400 })
+        return NextResponse.json({ error: 'At least one valid layer required (crimes, violations, crashes, service_requests)' }, { status: 400 })
     }
 
     // Auth check (mirrors permits route pattern)
@@ -61,78 +63,101 @@ export async function GET(request: NextRequest) {
         }
     }
 
-    // NOTE(Agent): Replaced isWithinChicago() gate with registry lookup.
-    // If no registries match this coordinate, return empty — same behavior
-    // as before but now city-agnostic.
-    const registries = await findDataLayersByCoords(lat, lon)
-    if (registries.length === 0) {
+    // NOTE(Agent): Use findDataLayersWithFallbacks to get ALL matching registries
+    // per layer_type, sorted by priority. This enables fallback when the primary
+    // registry returns 0 results (e.g., Chicago bbox covers suburbs but Socrata
+    // data doesn't — fall back to IDOT ArcGIS data for suburban crash coverage).
+    const registriesByLayer = await findDataLayersWithFallbacks(lat, lon)
+    if (registriesByLayer.size === 0) {
         return NextResponse.json(
             {},
             { headers: { 'Cache-Control': 'private, max-age=300' } }
         )
     }
 
-    // Build a map of layer_type → registry for quick lookup
-    const registryByLayer = new Map(registries.map((r) => [r.layer_type, r]))
-
-    // Fetch each requested layer (cache-first, parallel)
+    // Fetch each requested layer (cache-first, parallel, with fallback)
     const results = await Promise.allSettled(
         requestedLayers.map(async (layer) => {
-            const registry = registryByLayer.get(layer)
-            if (!registry) {
+            const registryList = registriesByLayer.get(layer)
+            if (!registryList || registryList.length === 0) {
                 // No registry for this layer at this location — return empty
                 return { layer, data: [] as unknown[], source: 'unsupported', sourceUrl: null, sourceLabel: null }
             }
 
-            const cacheKey = dataLayersCacheKey(lat, lon, layer, registry.domain)
+            // Try each registry in priority order until one returns results
+            for (const registry of registryList) {
+                const cacheKey = dataLayersCacheKey(lat, lon, layer, registry.domain || registry.city)
 
-            // Try primary cache
-            try {
-                const cached = await redis.get<LayerResult>(cacheKey)
-                if (cached) {
+                // Try primary cache
+                try {
+                    const cached = await redis.get<LayerResult>(cacheKey)
+                    if (cached && cached.length > 0) {
+                        return {
+                            layer,
+                            data: cached,
+                            source: 'cache',
+                            sourceUrl: registry.source_url,
+                            sourceLabel: registry.source_label,
+                        }
+                    }
+                } catch {
+                    // Redis unavailable — fall through to live fetch
+                }
+
+                // Live fetch using registry
+                let data: LayerResult = [] as unknown as LayerResult
+                switch (layer) {
+                    case 'crimes':
+                        data = await fetchCrimeIncidents(lat, lon, registry)
+                        break
+                    case 'violations':
+                        data = await fetchBuildingViolations(lat, lon, registry)
+                        break
+                    case 'crashes':
+                        data = await fetchTrafficCrashes(lat, lon, registry)
+                        break
+                    case 'service_requests':
+                        data = await fetchServiceRequests(lat, lon, registry)
+                        break
+                }
+
+                // Cache results (primary + stale fallback)
+                try {
+                    const staleKey = dataLayersStaleCacheKey(lat, lon, layer, registry.domain || registry.city)
+                    await Promise.all([
+                        redis.set(cacheKey, data, { ex: DATA_LAYERS_CACHE_TTL_SECONDS }),
+                        redis.set(staleKey, data, { ex: DATA_LAYERS_STALE_TTL_SECONDS }),
+                    ])
+                } catch {
+                    // Redis unavailable — result still returned, just not cached
+                }
+
+                // If we got results, return immediately (don't try fallbacks)
+                if (data.length > 0) {
                     return {
                         layer,
-                        data: cached,
-                        source: 'cache',
+                        data,
+                        source: 'live',
                         sourceUrl: registry.source_url,
                         sourceLabel: registry.source_label,
                     }
                 }
-            } catch {
-                // Redis unavailable — fall through to live fetch
+
+                // NOTE(Agent): Primary returned 0 results — try next registry (fallback).
+                // This is the key path for suburban areas covered by overlapping bboxes.
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log(`[data-layers] ${layer}: 0 results from ${registry.city}, trying fallback...`)
+                }
             }
 
-            // Live fetch using registry
-            let data: LayerResult
-            switch (layer) {
-                case 'crimes':
-                    data = await fetchCrimeIncidents(lat, lon, registry)
-                    break
-                case 'violations':
-                    data = await fetchBuildingViolations(lat, lon, registry)
-                    break
-                case 'crashes':
-                    data = await fetchTrafficCrashes(lat, lon, registry)
-                    break
-            }
-
-            // Cache results (primary + stale fallback)
-            try {
-                const staleKey = dataLayersStaleCacheKey(lat, lon, layer, registry.domain)
-                await Promise.all([
-                    redis.set(cacheKey, data, { ex: DATA_LAYERS_CACHE_TTL_SECONDS }),
-                    redis.set(staleKey, data, { ex: DATA_LAYERS_STALE_TTL_SECONDS }),
-                ])
-            } catch {
-                // Redis unavailable — result still returned, just not cached
-            }
-
+            // All registries exhausted, return empty from last attempt
+            const lastRegistry = registryList[registryList.length - 1]
             return {
                 layer,
-                data,
+                data: [] as unknown[],
                 source: 'live',
-                sourceUrl: registry.source_url,
-                sourceLabel: registry.source_label,
+                sourceUrl: lastRegistry.source_url,
+                sourceLabel: lastRegistry.source_label,
             }
         })
     )
@@ -147,10 +172,11 @@ export async function GET(request: NextRequest) {
         } else {
             // Fetch failed — try stale cache before giving up
             const failedLayer = requestedLayers[i]
-            const failedRegistry = failedLayer ? registryByLayer.get(failedLayer) : null
+            const failedRegistryList = failedLayer ? registriesByLayer.get(failedLayer) : null
+            const failedRegistry = failedRegistryList?.[0]
             if (failedLayer) {
                 try {
-                    const domain = failedRegistry?.domain ?? 'unknown'
+                    const domain = failedRegistry?.domain || failedRegistry?.city || 'unknown'
                     const staleKey = dataLayersStaleCacheKey(lat, lon, failedLayer, domain)
                     const stale = await redis.get<unknown[]>(staleKey)
                     if (stale) {

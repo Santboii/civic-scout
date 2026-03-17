@@ -26,8 +26,11 @@ describe('classifyPermit', () => {
         })
 
         it('detects all high-impact keywords', () => {
+            // NOTE(Agent): These must match HIGH_IMPACT_KEYWORDS exactly.
+            // 'industrial' alone is NOT a keyword — use the full forms.
             const keywords = [
-                'data center', 'factory', 'industrial', 'manufacturing', 'warehouse',
+                'data center', 'factory', 'industrial facility', 'industrial park',
+                'industrial site', 'manufacturing', 'warehouse',
                 'logistics', 'distribution', 'power plant', 'substation', 'refinery',
                 'planned development',
             ]

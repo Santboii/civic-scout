@@ -50,6 +50,16 @@
   --layer-violation: #D97706;
   --layer-crash: #4A90B0;
 
+  /* Dark Context — matching landing hero section */
+  /* NOTE(Agent): Used by the app header and any future dark-themed panels
+     to carry the landing page's dark navy identity into the app view. */
+  --dark-bg: #0D1117;
+  --dark-bg-gradient: linear-gradient(90deg, #0D1117 0%, #131A24 50%, #0D1117 100%);
+  --dark-text: rgba(255, 255, 255, 0.95);
+  --dark-text-muted: rgba(255, 255, 255, 0.5);
+  --dark-border: rgba(255, 255, 255, 0.08);
+  --dark-accent: #0FD4BD;
+
   /* Spacing Scale (8px base) */
   --space-1: 4px;
   --space-2: 8px;
@@ -76,8 +86,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-body);
-  --font-serif: var(--font-display);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-inter); /* NOTE(Agent): no serif font in use, alias kept for Tailwind compat */
 
   --color-accent-primary: var(--accent-primary);
   --color-text-secondary: var(--text-secondary);
@@ -118,7 +128,7 @@ body::after {
 body {
   background-color: var(--background-primary);
   color: var(--text-primary);
-  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -130,10 +140,10 @@ h4,
 h5,
 h6 {
   color: var(--text-primary);
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 h1 {
@@ -190,15 +200,7 @@ p {
   top: 16px;
 }
 
-/* NOTE(Agent): Global :focus-visible ensures every keyboard-focusable element
-   has a visible indicator. We use :focus-visible (not :focus) to avoid showing
-   the outline on mouse clicks, which would feel noisy for pointer users.
-   WCAG 2.4.7 — Focus Visible. */
-:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
+
 
 /* NOTE(Agent): Suppress motion for users who have opted into reduced motion in
    their OS. Covers CSS animations, transitions, and smooth scroll globally.
@@ -312,6 +314,47 @@ button:disabled {
 
 .leaflet-popup-tip {
   background: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* === Zoning Overlay Tooltip === */
+/* NOTE(Agent): Minimal tooltip for zoning district hover. Matches the
+   warm editorial design — warm white bg, subtle shadow, compact text. */
+.zoning-tooltip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: var(--shadow-md) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text-primary) !important;
+  font-family: var(--font-inter), system-ui, sans-serif !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  white-space: nowrap !important;
+}
+
+/* === Zoning Click Popup === */
+/* NOTE(Agent): Richer popup for zone click-to-inspect. Slightly larger
+   than the hover tooltip — shows description, allowed uses, ordinance
+   info, and a link to the city zoning map viewer. */
+.zoning-popup .leaflet-popup-content-wrapper {
+  background: rgba(255, 255, 255, 0.97) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: var(--shadow-lg) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 0 !important;
+}
+
+.zoning-popup .leaflet-popup-content {
+  margin: 0 !important;
+}
+
+.zoning-popup .leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.97) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: none !important;
 }
 
 /* === Scrollbar styling — warm gray === */

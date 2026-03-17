@@ -146,7 +146,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
               className="text-2xl leading-tight tracking-tight"
               style={{
                 color: 'var(--text-primary)',
-                fontFamily: 'var(--font-display), Georgia, serif',
+                fontFamily: 'var(--font-inter), system-ui, sans-serif',
                 fontWeight: 700,
               }}
             >
@@ -219,11 +219,15 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
                 </span>
               </div>
               <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                {new Date(permit.issue_date).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {/* NOTE(Agent): Defensive — some cities lack issue_date data */}
+                {(() => {
+                  const d = new Date(permit.issue_date)
+                  return isNaN(d.getTime()) ? 'Date pending' : d.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                })()}
               </p>
             </div>
           </div>
@@ -311,7 +315,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
                   >
                     Work Description
                   </p>
-                  <p className="leading-relaxed" style={{ fontFamily: 'var(--font-body)' }}>
+                  <p className="leading-relaxed" style={{ fontFamily: 'var(--font-inter)' }}>
                     {permit.work_description || 'No detailed work description provided for this permit.'}
                   </p>
                 </div>
@@ -331,7 +335,7 @@ export default function PermitDetailModal({ permit, onClose, cityName = 'Unknown
                   >
                     Permit Type (Raw)
                   </p>
-                  <p className="leading-relaxed font-medium" style={{ fontFamily: 'var(--font-body)' }}>
+                  <p className="leading-relaxed font-medium" style={{ fontFamily: 'var(--font-inter)' }}>
                     {permit.permit_type || 'Not specified'}
                   </p>
                 </div>

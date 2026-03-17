@@ -44,6 +44,10 @@ export interface DataLayerRegistry {
     bbox: BoundingBox
     priority: number
     enabled: boolean
+    // NOTE(Agent): Added for IDOT statewide crash data integration.
+    // Socrata registries use domain+dataset_id; ArcGIS registries use arcgis_url.
+    data_source_type: 'socrata' | 'arcgis'
+    arcgis_url: string | null
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -104,6 +108,40 @@ export async function findDataLayersByCoords(
 }
 
 /**
+ * Find all matching registries per layer_type at a given coordinate,
+ * sorted by priority descending (primary first, fallbacks after).
+ * Used by the API route to try fallback sources when the primary returns 0 results.
+ *
+ * NOTE(Agent): This exists because bbox regions overlap (e.g., Chicago's bbox
+ * covers many suburbs, but its Socrata data only contains Chicago city data).
+ * When a suburban search matches both Chicago (priority 0) and IDOT (priority -1),
+ * the API should try Chicago first, then fall back to IDOT if Chicago returns 0.
+ */
+export async function findDataLayersWithFallbacks(
+    lat: number,
+    lon: number
+): Promise<Map<DataLayerType, DataLayerRegistry[]>> {
+    const registries = await getAllDataLayerRegistries()
+    const matches = registries.filter(
+        (r) => isWithinBBox(lat, lon, r.bbox)
+    )
+
+    const byLayer = new Map<DataLayerType, DataLayerRegistry[]>()
+    for (const match of matches) {
+        const existing = byLayer.get(match.layer_type) ?? []
+        existing.push(match)
+        byLayer.set(match.layer_type, existing)
+    }
+
+    // Sort each layer's registries by priority descending (highest = primary)
+    for (const [, registryList] of byLayer) {
+        registryList.sort((a, b) => b.priority - a.priority)
+    }
+
+    return byLayer
+}
+
+/**
  * Find a registry for a specific layer type at a given coordinate.
  * Returns the first match (there should typically be only one per layer + location).
  */
@@ -132,9 +170,9 @@ function mapRow(row: Record<string, unknown>): DataLayerRegistry {
         id: row.id as string,
         city: row.city as string,
         state: row.state as string,
-        domain: row.domain as string,
+        domain: (row.domain as string) ?? '',
         layer_type: row.layer_type as DataLayerType,
-        dataset_id: row.dataset_id as string,
+        dataset_id: (row.dataset_id as string) ?? '',
         geo_column: (row.geo_column as string) ?? 'location',
         geo_type: (row.geo_type as 'point' | 'separate') ?? 'point',
         column_map: (row.column_map as DataLayerColumnMap) ?? {},
@@ -144,5 +182,7 @@ function mapRow(row: Record<string, unknown>): DataLayerRegistry {
         bbox: row.bbox as BoundingBox,
         priority: (row.priority as number) ?? 0,
         enabled: (row.enabled as boolean) ?? true,
+        data_source_type: (row.data_source_type as 'socrata' | 'arcgis') ?? 'socrata',
+        arcgis_url: (row.arcgis_url as string) ?? null,
     }
 }

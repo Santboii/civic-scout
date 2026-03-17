@@ -24,16 +24,19 @@ export const LAYER_SEVERITY_LABELS: Record<PermitSeverity, Record<string, string
         crimes: 'Safety Alert',
         violations: 'Critical Violation',
         crashes: 'Severe Crash',
+        service_requests: 'Health & Safety',
     },
     yellow: {
         crimes: 'Community Concern',
         violations: 'Active Violation',
         crashes: 'Injury Crash',
+        service_requests: 'Quality Concern',
     },
     green: {
         crimes: 'Incident Report',
         violations: 'Routine',
         crashes: 'Minor Crash',
+        service_requests: 'Service Request',
     },
 }
 
@@ -318,4 +321,95 @@ function titleCase(str: string): string {
     return str
         .toLowerCase()
         .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// ── 311 Service Request Classification ──────────────────────────────────────
+
+// NOTE(Agent): 311 sr_type values are highly varied (100+ distinct types per city).
+// We use substring keyword matching (like violations) rather than exact set matching
+// (like crimes) because sr_type strings are long and inconsistent across cities.
+
+const RED_311_KEYWORDS = [
+    'rodent', 'rat complaint', 'water main', 'gas leak',
+    'sewer cave', 'building collapse', 'hazardous', 'carbon monoxide',
+    'flooding', 'lead', 'asbestos',
+]
+
+const YELLOW_311_KEYWORDS = [
+    'noise', 'illegal dumping', 'pothole', 'street light',
+    'graffiti', 'abandoned vehicle', 'abandoned building',
+    'sidewalk', 'alley light', 'fly dumping', 'weed',
+    'garbage', 'trash', 'sanitation', 'vacant lot',
+    'water on street', 'water leak', 'e-scooter',
+]
+
+// NOTE(Agent): 311 has many status values. Completed/Closed* statuses indicate
+// the issue has been resolved. "Open - Dup" means a duplicate was filed — still
+// treated as active since the original request may still be open.
+const RESOLVED_311_STATUSES = ['completed', 'closed', 'closed (duplicate)']
+
+export function classify311(fields: {
+    srType: string
+    status: string
+}): LayerClassification {
+    const type = (fields.srType ?? '').toLowerCase()
+    const status = (fields.status ?? '').toLowerCase()
+    const isResolved = RESOLVED_311_STATUSES.some((s) => status.includes(s))
+
+    // Resolved requests are always green regardless of type
+    if (isResolved) {
+        return {
+            severity: 'green',
+            severityReason: 'Resolved request',
+            communityNote: build311CommunityNote('green', fields.srType, isResolved),
+        }
+    }
+
+    // RED — Health/safety hazards (open)
+    if (RED_311_KEYWORDS.some((kw) => type.includes(kw))) {
+        return {
+            severity: 'red',
+            severityReason: 'Health/safety concern (open)',
+            communityNote: build311CommunityNote('red', fields.srType, false),
+        }
+    }
+
+    // YELLOW — Active quality-of-life issues
+    if (YELLOW_311_KEYWORDS.some((kw) => type.includes(kw))) {
+        return {
+            severity: 'yellow',
+            severityReason: 'Quality-of-life issue (open)',
+            communityNote: build311CommunityNote('yellow', fields.srType, false),
+        }
+    }
+
+    // NOTE(Agent): Bias unknown open requests toward yellow (same logic as violations).
+    // A false-green for an actual issue is worse than a false-yellow for something routine.
+    return {
+        severity: 'yellow',
+        severityReason: 'Open request',
+        communityNote: build311CommunityNote('yellow', fields.srType, false),
+    }
+}
+
+function build311CommunityNote(
+    severity: PermitSeverity,
+    srType: string,
+    isResolved: boolean,
+): string {
+    const label = LAYER_SEVERITY_LABELS[severity].service_requests
+    const statusText = isResolved ? 'has been addressed' : 'is currently open'
+    const truncType = srType.length > 80
+        ? srType.substring(0, 80).trim() + '…'
+        : srType
+
+    if (severity === 'red') {
+        return `${label}: A "${titleCase(truncType)}" request ${statusText}. This may indicate a health or safety concern in the area.`
+    }
+
+    if (severity === 'yellow') {
+        return `${label}: A "${titleCase(truncType)}" request ${statusText}. Monitor for neighborhood conditions.`
+    }
+
+    return `${label}: A "${titleCase(truncType)}" request ${statusText}.`
 }

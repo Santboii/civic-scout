@@ -1,137 +1,175 @@
 /* ============================================
-   LandingHero — Civic Broadsheet Editorial Hero
-   ============================================ */
+   LandingHero — Cartographic Intelligence
+   ============================================
+   NOTE(Agent): Complete rewrite for the landing page overhaul.
+   Dark hero with topographic contour textures, split layout,
+   animated data visualization, bento feature grid, and metrics bar.
+   Uses DM Serif Display for headline, Inter for everything else. */
 
-/* === Background Grid Pattern === */
-/* NOTE(Agent): The animated grid evokes Chicago's street grid.
-   Uses repeating-linear-gradient for a lightweight CSS-only pattern
-   that drifts slowly to feel alive without GPU strain. */
+/* === Keyframes === */
 
 @keyframes gridDrift {
-    0% {
-        transform: translate(0, 0);
-    }
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(40px, 40px); }
+}
 
-    100% {
-        transform: translate(40px, 40px);
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes radarSweep {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes dataPulse {
+    0%, 100% {
+        box-shadow: 0 0 4px 1px rgba(10, 158, 142, 0.4);
+        opacity: 1;
+    }
+    50% {
+        box-shadow: 0 0 12px 4px rgba(10, 158, 142, 0.7);
+        opacity: 0.85;
     }
 }
 
-/* NOTE(Agent): Changed from translateY to opacity-only to prevent CLS.
-   translateY on in-flow elements causes siblings to shift as items appear.
-   The grid background uses translate safely because it's position:absolute. */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+@keyframes pingRing {
+    0% { transform: scale(0.8); opacity: 0.6; }
+    100% { transform: scale(2.6); opacity: 0; }
 }
 
 @keyframes heroGlow {
-
-    0%,
-    100% {
-        box-shadow: 0 0 24px rgba(10, 158, 142, 0.08), 0 0 0 1px var(--border-strong);
+    0%, 100% {
+        box-shadow: 0 0 24px rgba(10, 158, 142, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
-
     50% {
-        box-shadow: 0 0 32px rgba(10, 158, 142, 0.18), 0 0 0 1px var(--accent-primary);
+        box-shadow: 0 0 40px rgba(10, 158, 142, 0.2), 0 0 0 1px rgba(10, 158, 142, 0.3);
     }
 }
 
 @keyframes accentLine {
-    0% {
-        transform: scaleX(0);
-    }
-
-    100% {
-        transform: scaleX(1);
-    }
+    0% { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
 }
 
-/* === Layout === */
+@keyframes countUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
-.hero {
-    position: relative;
+/* === Root Container === */
+
+.landing {
+    width: 100%;
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+}
+
+/* ================================================
+   SECTION 1: HERO — Dark split layout
+   ================================================ */
+
+.hero {
+    position: relative;
+    min-height: 92vh;
+    display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    padding: 2rem 1.5rem 4rem;
+    padding: 3rem 2rem 5rem;
+    /* Dark navy base */
+    background: linear-gradient(168deg, #0D1117 0%, #131A24 40%, #0F1923 100%);
 }
 
-/* Grid background layer */
-.gridLayer {
+/* Topographic contour-line background pattern */
+.topoLayer {
     position: absolute;
     inset: -80px;
     z-index: 0;
-    opacity: 0.35;
-    animation: gridDrift 25s linear infinite;
+    opacity: 0.12;
+    animation: gridDrift 30s linear infinite;
     background-image:
+        /* Concentric circles (contour lines) */
+        radial-gradient(circle at 25% 35%, transparent 120px, rgba(10, 158, 142, 0.3) 121px, transparent 122px),
+        radial-gradient(circle at 25% 35%, transparent 200px, rgba(10, 158, 142, 0.2) 201px, transparent 202px),
+        radial-gradient(circle at 25% 35%, transparent 280px, rgba(10, 158, 142, 0.15) 281px, transparent 282px),
+        radial-gradient(circle at 70% 60%, transparent 100px, rgba(10, 158, 142, 0.25) 101px, transparent 102px),
+        radial-gradient(circle at 70% 60%, transparent 180px, rgba(10, 158, 142, 0.18) 181px, transparent 182px),
+        radial-gradient(circle at 70% 60%, transparent 260px, rgba(10, 158, 142, 0.12) 261px, transparent 262px),
+        /* Grid overlay */
         repeating-linear-gradient(0deg,
-            rgba(10, 158, 142, 0.06) 0px,
-            rgba(10, 158, 142, 0.06) 1px,
+            rgba(10, 158, 142, 0.04) 0px,
+            rgba(10, 158, 142, 0.04) 1px,
             transparent 1px,
-            transparent 80px),
+            transparent 60px),
         repeating-linear-gradient(90deg,
-            rgba(10, 158, 142, 0.06) 0px,
-            rgba(10, 158, 142, 0.06) 1px,
+            rgba(10, 158, 142, 0.04) 0px,
+            rgba(10, 158, 142, 0.04) 1px,
             transparent 1px,
-            transparent 80px);
+            transparent 60px);
     pointer-events: none;
 }
 
-/* Radial spotlight for depth */
+/* Depth gradient overlay */
 .spotlight {
     position: absolute;
     inset: 0;
     z-index: 1;
     background:
-        radial-gradient(ellipse 60% 50% at 50% 40%, rgba(10, 158, 142, 0.04) 0%, transparent 70%),
-        radial-gradient(ellipse 40% 30% at 20% 80%, rgba(200, 136, 10, 0.025) 0%, transparent 60%);
+        radial-gradient(ellipse 65% 55% at 30% 45%, rgba(10, 158, 142, 0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 80% 65%, rgba(42, 87, 154, 0.04) 0%, transparent 60%);
     pointer-events: none;
 }
 
-/* === Content === */
-
-.content {
+/* Hero content — split layout */
+.heroInner {
     position: relative;
     z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+    max-width: 1200px;
+    width: 100%;
+}
+
+/* === Left Column: Copy + Search === */
+
+.heroLeft {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    max-width: 640px;
-    width: 100%;
-    text-align: center;
+    gap: 0;
 }
 
 /* Brand mark */
 .brand {
-    animation: fadeIn 0.5s ease-out both;
+    animation: fadeIn 0.4s ease-out both;
     animation-delay: 0.05s;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .brandName {
-    font-family: var(--font-display), Georgia, serif;
+    font-family: var(--font-inter), system-ui, sans-serif;
     font-weight: 700;
-    font-size: 1.35rem;
-    color: var(--text-primary);
+    font-size: 1.25rem;
+    color: rgba(255, 255, 255, 0.95);
     letter-spacing: -0.01em;
 }
 
 .brandAccent {
-    color: var(--accent-primary);
+    color: #0FD4BD;
 }
 
 .badge {
     display: inline-block;
-    font-family: var(--font-body);
+    font-family: var(--font-inter);
     font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
@@ -140,58 +178,63 @@
     border-radius: 9999px;
     margin-left: 10px;
     vertical-align: middle;
-    background-color: var(--accent-glow);
-    color: var(--accent-primary);
-    border: 1px solid rgba(10, 158, 142, 0.15);
+    background-color: rgba(10, 158, 142, 0.12);
+    color: #0FD4BD;
+    border: 1px solid rgba(10, 158, 142, 0.2);
 }
 
-/* Headline */
-/* NOTE(Agent): LCP element — no animation delay so the browser can register
-   it immediately. Using opacity-only fade (no translateY) prevents CLS. */
+/* Headline — DM Serif Display */
+/* NOTE(Agent): LCP element — no animation delay so the browser registers it
+   immediately. Using opacity-only fade (no translateY) prevents CLS. */
 .headline {
-    font-family: var(--font-display), Georgia, serif;
-    font-weight: 700;
-    font-size: clamp(2.2rem, 5.5vw, 3.6rem);
-    line-height: 1.1;
-    letter-spacing: -0.03em;
-    color: var(--text-primary);
+    font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: clamp(2.6rem, 5vw, 4rem);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    color: rgba(255, 255, 255, 0.97);
     margin: 0 0 0.5rem;
     animation: fadeIn 0.4s ease-out both;
-    /* No animation-delay: LCP element must be visible immediately */
 }
 
-/* Accent underline beneath headline */
+.headlineAccent {
+    color: #0FD4BD;
+    /* Subtle text-shadow glow on the accented word */
+    text-shadow: 0 0 30px rgba(15, 212, 189, 0.2);
+}
+
+/* Accent underline */
 .accentLine {
     display: block;
-    width: 48px;
+    width: 56px;
     height: 3px;
-    margin: 0 auto 1.5rem;
+    margin: 0.75rem 0 1.5rem;
     border-radius: 2px;
-    background: var(--accent-primary);
+    background: linear-gradient(90deg, #0FD4BD, rgba(15, 212, 189, 0.3));
     transform-origin: left center;
     animation: accentLine 0.8s ease-out both;
-    animation-delay: 0.6s;
+    animation-delay: 0.5s;
 }
 
 .subtitle {
-    font-family: var(--font-body);
-    font-size: clamp(0.95rem, 2vw, 1.1rem);
-    line-height: 1.65;
-    color: var(--text-secondary);
-    margin: 0 auto 2.5rem;
-    max-width: 480px;
-    animation: fadeIn 0.6s ease-out both;
-    animation-delay: 0.15s;
+    font-family: var(--font-inter);
+    font-size: clamp(1rem, 1.8vw, 1.15rem);
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.55);
+    margin: 0 0 2rem;
+    max-width: 460px;
+    animation: fadeIn 0.5s ease-out both;
+    animation-delay: 0.12s;
 }
 
-/* Search CTA wrapper — oversized feel */
+/* Search CTA wrapper */
 .searchWrapper {
     position: relative;
     z-index: 10;
     width: 100%;
-    max-width: 520px;
-    animation: fadeIn 0.6s ease-out both;
-    animation-delay: 0.25s;
+    max-width: 480px;
+    animation: fadeIn 0.5s ease-out both;
+    animation-delay: 0.2s;
 }
 
 .searchGlow {
@@ -200,15 +243,15 @@
     animation-delay: 1.5s;
 }
 
-/* Hint below search */
+/* Search hint text */
 .searchHint {
     margin-top: 0.75rem;
-    font-family: var(--font-body);
+    font-family: var(--font-inter);
     font-size: 11px;
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.35);
     letter-spacing: 0.02em;
-    animation: fadeIn 0.6s ease-out both;
-    animation-delay: 0.35s;
+    animation: fadeIn 0.5s ease-out both;
+    animation-delay: 0.3s;
 }
 
 .searchHintKey {
@@ -218,71 +261,750 @@
     font-size: 10px;
     font-weight: 600;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.04);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    font-family: var(--font-body);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.5);
+    font-family: var(--font-inter);
 }
 
-/* === Feature Cards === */
+/* === Right Column: Data Visualization === */
 
-.features {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-top: 3.5rem;
-    width: 100%;
-    max-width: 560px;
-    animation: fadeIn 0.6s ease-out both;
-    animation-delay: 0.45s;
-}
-
-.featureCard {
+.heroRight {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1.25rem 0.75rem;
-    border-radius: 12px;
+    justify-content: center;
+    gap: 1.25rem;
+    animation: fadeIn 0.8s ease-out both;
+    animation-delay: 0.4s;
+}
+
+.vizContainer {
+    position: relative;
+    width: 380px;
+    height: 380px;
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+/* ── SVG Map Layer ── */
+.vizMapGrid {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    opacity: 0.5;
+    animation: fadeIn 1.2s ease-out both;
+    animation-delay: 0.3s;
+}
+
+/* Minor street lines */
+.vizMapGrid line {
+    stroke: rgba(10, 158, 142, 0.18);
+    stroke-width: 0.7;
+}
+
+/* Major avenues — thicker */
+.vizMapMajorSt {
+    stroke: rgba(10, 158, 142, 0.3) !important;
+    stroke-width: 1.5 !important;
+}
+
+/* Diagonal avenue — like Milwaukee Ave */
+.vizMapDiagonal {
+    stroke: rgba(10, 158, 142, 0.2) !important;
+    stroke-width: 1.2 !important;
+}
+
+/* River curve */
+.vizMapRiver {
+    stroke: rgba(96, 165, 250, 0.25);
+    stroke-width: 4;
+    fill: none;
+}
+
+/* City building blocks */
+.vizMapBlock {
+    fill: rgba(10, 158, 142, 0.05);
+    stroke: rgba(10, 158, 142, 0.07);
+    stroke-width: 0.4;
+}
+
+/* Park / green space — slightly brighter */
+.vizMapPark {
+    fill: rgba(15, 212, 189, 0.1);
+    stroke: rgba(15, 212, 189, 0.12);
+    stroke-width: 0.4;
+}
+
+/* ── Search Radius (dashed circle, matching Map.tsx) ── */
+.vizSearchRadius {
+    fill: rgba(10, 158, 142, 0.03);
+    stroke: rgba(10, 158, 142, 0.35);
+    stroke-width: 1.2;
+    stroke-dasharray: 4, 8;
+}
+
+/* ── Realistic SVG Data Markers (matching Map.tsx shapes) ── */
+
+/* Permit markers — filled circles with white border (3 severity colors) */
+.vizMarkerPermitGreen {
+    fill: #1B9B6C;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 3px rgba(27, 155, 108, 0.5));
+}
+
+.vizMarkerPermitYellow {
+    fill: #C99A1D;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 3px rgba(201, 154, 29, 0.5));
+}
+
+.vizMarkerPermitRed {
+    fill: #D94F3B;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 3px rgba(217, 79, 59, 0.5));
+}
+
+/* Crime markers — rotated diamonds */
+.vizMarkerCrime {
+    fill: #D94F3B;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 1;
+    transform-origin: center;
+    transform: rotate(45deg);
+    filter: drop-shadow(0 0 2px rgba(217, 79, 59, 0.4));
+}
+
+/* Violation markers — small squares */
+.vizMarkerViolation {
+    fill: #D97706;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 1;
+    filter: drop-shadow(0 0 2px rgba(217, 119, 6, 0.4));
+}
+
+/* Crash markers — triangles */
+.vizMarkerCrash {
+    fill: #4A90B0;
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 0.8;
+    filter: drop-shadow(0 0 2px rgba(74, 144, 176, 0.4));
+}
+
+/* ── Center Pin (matching Map.tsx center marker) ── */
+.vizCenterPin {
+    fill: #0A9E8E;
+    stroke: #0A9E8E;
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 8px rgba(10, 158, 142, 0.4));
+}
+
+.vizCenterPulse {
+    fill: none;
+    stroke: rgba(10, 158, 142, 0.3);
+    stroke-width: 1;
+    animation: svgPulse 2s ease-in-out infinite;
+}
+
+@keyframes svgPulse {
+    0%, 100% { r: 12; opacity: 0.5; }
+    50% { r: 20; opacity: 0; }
+}
+
+/* ── Radar sweep arm (overlays the map) ── */
+.vizSweep {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50%;
+    height: 2px;
+    transform-origin: left center;
+    animation: radarSweep 8s linear infinite;
+    background: linear-gradient(90deg, rgba(15, 212, 189, 0.4), transparent);
+    z-index: 2;
+}
+
+/* ── Data point label dots (hover anchors outside SVG) ── */
+.dataPoint {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: dataPulse 2s ease-in-out infinite;
+    z-index: 3;
+}
+
+.dataPoint::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid;
+    animation: pingRing 2.5s ease-out infinite;
+}
+
+/* Color variants for data point label dots */
+.dpPermit {
+    background: #1B9B6C;
+    box-shadow: 0 0 8px rgba(27, 155, 108, 0.5);
+}
+.dpPermit::after { border-color: rgba(27, 155, 108, 0.3); }
+
+.dpCrime {
+    background: #D94F3B;
+    box-shadow: 0 0 8px rgba(217, 79, 59, 0.5);
+}
+.dpCrime::after { border-color: rgba(217, 79, 59, 0.3); }
+
+.dpViolation {
+    background: #D97706;
+    box-shadow: 0 0 8px rgba(217, 119, 6, 0.5);
+}
+.dpViolation::after { border-color: rgba(217, 119, 6, 0.3); }
+
+.dpZoning {
+    background: #60A5FA;
+    box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+}
+.dpZoning::after { border-color: rgba(96, 165, 250, 0.3); }
+
+.dpCrash {
+    background: #4A90B0;
+    box-shadow: 0 0 8px rgba(74, 144, 176, 0.5);
+}
+.dpCrash::after { border-color: rgba(74, 144, 176, 0.3); }
+
+/* Labels on data points */
+.dataLabel {
+    position: absolute;
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Layer type legend — horizontal row below radar */
+.layerLegend {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    animation: fadeIn 1s ease-out both;
+    animation-delay: 0.8s;
+}
+
+.legendItem {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.legendMarker {
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.legendLabel {
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Permit — filled circle, green (matching Map.tsx standard severity) */
+.legendPermit {
+    border-radius: 50%;
+    background: #1B9B6C;
+    box-shadow: 0 0 4px rgba(27, 155, 108, 0.4);
+}
+
+/* Crime — rotated diamond (matching Map.tsx crimes marker) */
+.legendCrime {
+    border-radius: 1px;
+    background: #D94F3B;
+    transform: rotate(45deg) scale(0.85);
+    box-shadow: 0 0 4px rgba(217, 79, 59, 0.4);
+}
+
+/* Violation — square (matching Map.tsx violations marker) */
+.legendViolation {
+    border-radius: 1px;
+    background: #D97706;
+    box-shadow: 0 0 4px rgba(217, 119, 6, 0.4);
+}
+
+/* Crash — triangle via CSS borders (matching Map.tsx crashes marker) */
+.legendCrash {
+    width: 0;
+    height: 0;
+    background: transparent;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 8px solid #4A90B0;
+    filter: drop-shadow(0 0 3px rgba(74, 144, 176, 0.4));
+}
+
+/* Zoning — rounded colored patch */
+.legendZoning {
+    border-radius: 2px;
+    background: rgba(96, 165, 250, 0.6);
+    box-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+/* Diagonal divider between hero and body */
+.heroDivider {
+    position: relative;
+    z-index: 3;
+    height: 80px;
+    margin-top: -80px;
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        var(--background-primary) 100%
+    );
+    pointer-events: none;
+}
+
+/* ================================================
+   SECTION 2: METRICS BAR
+   ================================================ */
+
+.metricsBar {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    padding: 2.5rem 2rem;
+    background: var(--background-primary);
+    border-bottom: 1px solid var(--border-glass);
+    animation: countUp 0.6s ease-out both;
+    animation-delay: 0.6s;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.metricValue {
+    font-family: var(--font-display), Georgia, serif;
+    font-size: 2rem;
+    color: var(--text-primary);
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+.metricLabel {
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--text-muted);
+}
+
+/* ================================================
+   SECTION 3: FEATURE BENTO GRID
+   ================================================ */
+
+.featuresSection {
+    padding: 4rem 2rem 5rem;
+    background: var(--background-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.featuresSectionTitle {
+    font-family: var(--font-display), Georgia, serif;
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    color: var(--text-primary);
+    text-align: center;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+    animation: fadeSlideUp 0.5s ease-out both;
+}
+
+.featuresSectionSubtitle {
+    font-family: var(--font-inter);
+    font-size: 1rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 0 0 3rem;
+    max-width: 520px;
+    animation: fadeSlideUp 0.5s ease-out both;
+    animation-delay: 0.1s;
+}
+
+.bentoGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto;
+    gap: 1rem;
+    max-width: 960px;
+    width: 100%;
+}
+
+/* Large card spans 2 columns */
+.bentoCardLarge {
+    grid-column: span 2;
+}
+
+/* Full-width card spans all 3 columns */
+.bentoCardFull {
+    grid-column: span 3;
+}
+.bentoCard {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.75rem;
+    border-radius: 16px;
     background: var(--background-card);
     border: 1px solid var(--border-glass);
     box-shadow: var(--shadow-sm);
-    transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    overflow: hidden;
+    transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+    animation: fadeSlideUp 0.5s ease-out both;
 }
 
-.featureCard:hover {
+.bentoCard:hover {
     box-shadow: var(--shadow-md);
     border-color: var(--border-strong);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
 }
 
-.featureIcon {
-    font-size: 1.35rem;
+/* Accent bar at top of each card */
+.bentoCard::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 1.5rem;
+    right: 1.5rem;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+}
+
+.bentoCard:hover::before {
+    opacity: 1;
+}
+
+/* Card accent color variants */
+.bentoAccentTeal::before { background: var(--accent-primary); }
+.bentoAccentRed::before { background: var(--status-red); }
+.bentoAccentBlue::before { background: var(--status-indigo); }
+.bentoAccentYellow::before { background: var(--status-yellow); }
+.bentoAccentGreen::before { background: var(--status-green); }
+.bentoAccentPurple::before { background: #8B5CF6; }
+
+.bentoIcon {
+    font-size: 1.5rem;
     line-height: 1;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    border: 1px solid var(--border-glass);
 }
 
-.featureTitle {
-    font-family: var(--font-body);
-    font-size: 11px;
-    font-weight: 600;
+.bentoTitle {
+    font-family: var(--font-inter);
+    font-size: 14px;
+    font-weight: 700;
     color: var(--text-primary);
-    text-align: center;
     line-height: 1.3;
+    letter-spacing: -0.01em;
 }
 
-.featureDesc {
-    font-family: var(--font-body);
-    font-size: 10px;
+.bentoDesc {
+    font-family: var(--font-inter);
+    font-size: 13px;
     color: var(--text-muted);
-    text-align: center;
-    line-height: 1.4;
+    line-height: 1.6;
     margin: 0;
 }
 
-/* === Trust Footer === */
+/* Severity chips preview inside the AI Analysis card */
+.severityPreview {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
 
+.severityChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 9999px;
+}
+
+.chipLow {
+    background: rgba(27, 155, 108, 0.1);
+    color: var(--status-green);
+    border: 1px solid rgba(27, 155, 108, 0.15);
+}
+
+.chipMed {
+    background: rgba(201, 154, 29, 0.1);
+    color: var(--status-yellow);
+    border: 1px solid rgba(201, 154, 29, 0.15);
+}
+
+.chipHigh {
+    background: rgba(217, 79, 59, 0.1);
+    color: var(--status-red);
+    border: 1px solid rgba(217, 79, 59, 0.15);
+}
+
+/* Data layer badges inside feature cards */
+.layerBadges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+
+.layerBadge {
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+}
+
+/* ================================================
+   CARD VARIANT: Interactive Permit Map
+   ================================================
+   NOTE(Agent): Unique split-layout card with decorative mini-map SVG.
+   Gives this card a cartographic identity distinct from the others. */
+
+.permitInner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.permitText {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.permitCoords {
+    font-family: 'Courier New', 'Courier', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #0FD4BD;
+}
+
+.permitSource {
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    opacity: 0.6;
+    margin-top: 0.25rem;
+    letter-spacing: 0.02em;
+}
+
+.permitViz {
+    width: 120px;
+    height: 120px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(15, 212, 189, 0.03);
+    border: 1px solid rgba(15, 212, 189, 0.08);
+}
+
+.permitMapSvg {
+    width: 100%;
+    height: 100%;
+    color: var(--text-primary);
+}
+
+/* ================================================
+   CARD VARIANT: AI Impact Analysis
+   ================================================
+   NOTE(Agent): Dashboard-panel feel with a spectrum bar visualization
+   instead of the generic severity chips. */
+
+.analysisLabel {
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--status-green);
+    opacity: 0.8;
+}
+
+/* Spectrum bar — gradient from green → yellow → red */
+.spectrumBar {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    margin-top: 0.5rem;
+    overflow: visible;
+}
+
+.spectrumTrack {
+    width: 100%;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(
+        90deg,
+        rgba(27, 155, 108, 0.6) 0%,
+        rgba(201, 154, 29, 0.6) 50%,
+        rgba(217, 79, 59, 0.6) 100%
+    );
+}
+
+/* Animated marker — slides along the spectrum */
+.spectrumMarker {
+    position: absolute;
+    top: 50%;
+    left: 30%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--background-card);
+    border: 2px solid var(--status-green);
+    transform: translateY(-50%);
+    box-shadow: 0 0 6px rgba(27, 155, 108, 0.4);
+    transition: left 0.6s ease;
+}
+
+.analysisCard:hover .spectrumMarker {
+    left: 65%;
+    border-color: var(--status-yellow);
+    box-shadow: 0 0 6px rgba(201, 154, 29, 0.5);
+}
+
+.spectrumLabels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.35rem;
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+/* ================================================
+   CARD VARIANT: Crime & Safety Intel
+   ================================================
+   NOTE(Agent): Alert-panel style with thick left border and
+   pulsing status indicator. Feels like a live monitoring panel. */
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 3px rgba(248, 113, 113, 0.4); }
+    50% { opacity: 0.5; box-shadow: 0 0 8px rgba(248, 113, 113, 0.7); }
+}
+
+.crimeHeader {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crimeStatusDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-red);
+    animation: statusPulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+.crimeHeaderLabel {
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--status-red);
+    opacity: 0.8;
+}
+
+/* Crime category tags with colored dot indicators */
+.crimeTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+
+.crimeTag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-inter);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(248, 113, 113, 0.05);
+    border: 1px solid rgba(248, 113, 113, 0.12);
+    color: var(--text-secondary);
+}
+
+.crimeTagDot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ================================================
+   SECTION 4: CITIES + FINAL CTA
+   ================================================ */
+
+.citiesSection {
+    padding: 3rem 2rem 5rem;
+    background: var(--background-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Trust footer */
 .trust {
-    margin-top: 3rem;
+    margin-top: 2.5rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -296,10 +1018,11 @@
     border-radius: 50%;
     background: var(--status-green);
     flex-shrink: 0;
+    animation: dataPulse 3s ease-in-out infinite;
 }
 
 .trustText {
-    font-family: var(--font-body);
+    font-family: var(--font-inter);
     font-size: 10px;
     font-weight: 500;
     color: var(--text-muted);
@@ -307,48 +1030,140 @@
     margin: 0;
 }
 
-/* === Responsive === */
+/* ================================================
+   RESPONSIVE
+   ================================================ */
 
-@media (max-width: 640px) {
-    .hero {
-        padding: 1.5rem 1rem 3rem;
-    }
-
-    .features {
+@media (max-width: 1024px) {
+    .heroInner {
         grid-template-columns: 1fr;
-        max-width: 280px;
+        gap: 3rem;
+        text-align: center;
     }
 
-    .headline {
-        font-size: 2rem;
+    .heroLeft {
+        align-items: center;
     }
 
-    .brand {
-        margin-bottom: 1.5rem;
+    .subtitle {
+        max-width: 520px;
     }
 
-    .gridLayer {
-        background-image:
-            repeating-linear-gradient(0deg,
-                rgba(10, 158, 142, 0.05) 0px,
-                rgba(10, 158, 142, 0.05) 1px,
-                transparent 1px,
-                transparent 60px),
-            repeating-linear-gradient(90deg,
-                rgba(10, 158, 142, 0.05) 0px,
-                rgba(10, 158, 142, 0.05) 1px,
-                transparent 1px,
-                transparent 60px);
+    .searchWrapper {
+        max-width: 520px;
+    }
+
+    .heroRight {
+        order: -1;
+    }
+
+    .vizContainer {
+        width: 280px;
+        height: 280px;
+    }
+
+    .bentoGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .bentoCardLarge {
+        grid-column: span 2;
+    }
+
+    .bentoCardFull {
+        grid-column: span 2;
+    }
+
+    .accentLine {
+        margin-left: auto;
+        margin-right: auto;
     }
 }
 
-/* NOTE(Agent): Hero-specific reduced-motion override. The global rule in globals.css
-   handles transitions, but these module-scoped keyframe animations need explicit
-   overrides here. Disables gridDrift, heroGlow, and accentLine scale animations.
+@media (max-width: 640px) {
+    .hero {
+        padding: 2rem 1rem 3rem;
+        min-height: auto;
+    }
+
+    .headline {
+        font-size: 2.2rem;
+    }
+
+    .vizContainer {
+        width: 220px;
+        height: 220px;
+    }
+
+    .metricsBar {
+        gap: 1.5rem;
+        padding: 2rem 1rem;
+    }
+
+    .metricValue {
+        font-size: 1.5rem;
+    }
+
+    .bentoGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .bentoCardLarge {
+        grid-column: span 1;
+    }
+
+    .bentoCardFull {
+        grid-column: span 1;
+    }
+
+    /* Permit card: collapse split layout on mobile */
+    .permitInner {
+        grid-template-columns: 1fr;
+    }
+
+    .permitViz {
+        width: 100%;
+        height: 80px;
+    }
+
+    .featuresSection {
+        padding: 3rem 1rem 4rem;
+    }
+
+    .citiesSection {
+        padding: 2rem 1rem 4rem;
+    }
+
+    .topoLayer {
+        opacity: 0.08;
+    }
+}
+
+/* ================================================
+   REDUCED MOTION
+   ================================================ */
+
+/* NOTE(Agent): Hero-specific reduced-motion overrides. The global rule in globals.css
+   handles transitions, but module-scoped keyframe animations need explicit overrides.
    WCAG 2.3.3 / best practice for vestibular disorder accessibility. */
 @media (prefers-reduced-motion: reduce) {
-    .gridLayer {
+    .topoLayer {
         animation: none;
+    }
+
+    .vizSweep {
+        animation: none;
+        display: none;
+    }
+
+    .dataPoint {
+        animation: none;
+        opacity: 1;
+    }
+
+    .dataPoint::after {
+        animation: none;
+        display: none;
     }
 
     .searchGlow {
@@ -360,12 +1175,30 @@
         transform: scaleX(1);
     }
 
+    .trustDot {
+        animation: none;
+    }
+
+    .crimeStatusDot {
+        animation: none;
+        opacity: 1;
+    }
+
+    .spectrumMarker {
+        transition: none;
+    }
+
     .brand,
     .headline,
     .subtitle,
     .searchWrapper,
     .searchHint,
-    .features,
+    .heroRight,
+    .metricsBar,
+    .bentoCard,
+    .featuresSectionTitle,
+    .featuresSectionSubtitle,
+    .vizCenterLabel,
     .trust {
         animation: none;
         opacity: 1;

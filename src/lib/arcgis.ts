@@ -3,7 +3,7 @@ import type { NormalizedRawPermit } from './socrata'
 import { geocodeAddress } from './census-geocoder'
 import { haversineDistance } from './geo-utils'
 
-const DEFAULT_RADIUS_METERS = 8046 // ≈ 5 miles
+const DEFAULT_RADIUS_METERS = 805 // ≈ 0.5 miles (1-mile diameter)
 
 /**
  * ArcGIS Feature Service response structure.

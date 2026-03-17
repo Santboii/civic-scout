@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useId } from 'react'
-import { X, MapPin, Calendar, AlertTriangle, Shield, Car } from 'lucide-react'
+import { X, MapPin, Calendar, AlertTriangle, Shield, Car, Phone } from 'lucide-react'
 import type { DataLayerItem } from '@/lib/data-layers'
 import { LAYER_SEVERITY_LABELS } from '@/lib/data-layer-classifier'
 import type { PermitSeverity } from '@/lib/permit-classifier'
@@ -44,6 +44,15 @@ const LAYER_CONFIG = {
         Icon: Car,
         sourceUrl: 'https://data.cityofchicago.org/Transportation/Traffic-Crashes-Crashes/85ca-t3if',
         sourceLabel: 'Chicago Traffic Crashes',
+    },
+    service_requests: {
+        color: 'var(--layer-311, #8B5CF6)',
+        bg: 'rgba(139, 92, 246, 0.06)',
+        border: 'rgba(139, 92, 246, 0.12)',
+        label: '311 Service Request',
+        Icon: Phone,
+        sourceUrl: 'https://data.cityofchicago.org/Service-Requests/311-Service-Requests/v6vf-nfxy',
+        sourceLabel: 'Chicago 311 Service Requests',
     },
 }
 
@@ -148,6 +157,7 @@ export default function DataLayerDetailModal({ item, onClose, sourceUrl, sourceL
                     {item.layerType === 'crimes' && <CrimeContent item={item} headingId={headingId} config={config} />}
                     {item.layerType === 'violations' && <ViolationContent item={item} headingId={headingId} config={config} />}
                     {item.layerType === 'crashes' && <CrashContent item={item} headingId={headingId} config={config} />}
+                    {item.layerType === 'service_requests' && <ServiceRequestContent item={item} headingId={headingId} config={config} />}
                 </div>
 
                 {/* Footer */}
@@ -264,7 +274,7 @@ function CrimeContent({ item, headingId, config }: ContentProps & { item: Extrac
                 <h2
                     id={headingId}
                     className="text-2xl leading-tight tracking-tight"
-                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display), Georgia, serif', fontWeight: 700 }}
+                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-inter), system-ui, sans-serif', fontWeight: 700 }}
                 >
                     {item.primaryType}
                 </h2>
@@ -318,7 +328,7 @@ function ViolationContent({ item, headingId, config }: ContentProps & { item: Ex
                 <h2
                     id={headingId}
                     className="text-2xl leading-tight tracking-tight"
-                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display), Georgia, serif', fontWeight: 700 }}
+                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-inter), system-ui, sans-serif', fontWeight: 700 }}
                 >
                     {item.violationCode || 'Building Violation'}
                 </h2>
@@ -397,7 +407,7 @@ function CrashContent({ item, headingId, config }: ContentProps & { item: Extrac
                 <h2
                     id={headingId}
                     className="text-2xl leading-tight tracking-tight"
-                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display), Georgia, serif', fontWeight: 700 }}
+                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-inter), system-ui, sans-serif', fontWeight: 700 }}
                 >
                     {item.crashType || 'Traffic Crash'}
                 </h2>
@@ -468,6 +478,62 @@ function CrashContent({ item, headingId, config }: ContentProps & { item: Extrac
                     </p>
                 </div>
             )}
+        </>
+    )
+}
+
+function ServiceRequestContent({ item, headingId, config: _config }: ContentProps & { item: Extract<DataLayerItem, { layerType: 'service_requests' }> }) {
+    const formattedDate = item.createdDate
+        ? new Date(item.createdDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'Unknown'
+
+    const isOpen = !item.status.toLowerCase().includes('completed') && !item.status.toLowerCase().includes('closed')
+
+    return (
+        <>
+            {/* Severity callout */}
+            <SeverityCallout severity={item.severity} layerType={item.layerType} communityNote={item.communityNote} />
+
+            <section>
+                <h2
+                    id={headingId}
+                    className="text-2xl leading-tight tracking-tight"
+                    style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-inter), system-ui, sans-serif', fontWeight: 700 }}
+                >
+                    {item.srType || '311 Request'}
+                </h2>
+                <div className="flex items-center gap-2 mt-2">
+                    <MapPin size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{item.address}</span>
+                </div>
+            </section>
+
+            <div className="grid grid-cols-2 gap-3">
+                <StatCard label="Reported" value={formattedDate} icon={Calendar} />
+                <div
+                    className="rounded-xl p-4 border"
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', borderColor: 'var(--border-glass)' }}
+                >
+                    <div className="flex items-center gap-2 mb-1">
+                        <Phone size={14} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                            Status
+                        </span>
+                    </div>
+                    <Badge
+                        label={item.status || 'Unknown'}
+                        color={isOpen ? '#8B5CF6' : '#1B9B6C'}
+                        bg={isOpen ? 'rgba(139, 92, 246, 0.08)' : 'rgba(27, 155, 108, 0.08)'}
+                    />
+                </div>
+            </div>
+
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                    Service Request #{' '}
+                </span>
+                {item.srNumber}
+            </div>
         </>
     )
 }

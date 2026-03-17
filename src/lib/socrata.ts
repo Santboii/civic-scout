@@ -4,7 +4,7 @@ import { batchGeocode } from './census-geocoder'
 import { redis, muniDiscoveryCacheKey, MUNI_DISCOVERY_CACHE_TTL_SECONDS } from './redis'
 import { haversineDistance } from './geo-utils'
 
-const RADIUS_METERS = 8046 // ≈ 5 miles
+const RADIUS_METERS = 805 // ≈ 0.5 miles (1-mile diameter)
 
 /**
  * Generic permit fetch router — dispatches to the correct adapter

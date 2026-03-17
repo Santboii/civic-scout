@@ -1,0 +1,179 @@
+/* ============================================
+   AppHeader — Dark Navy Persistent Brand Bar
+   ============================================
+   NOTE(Agent): Carries the landing page's dark hero identity into the
+   app view. Uses the same navy palette (#0D1117), teal accent (#0FD4BD),
+   and topographic texture as the landing hero section. Replaces the
+   previous inline-styled light glass header. */
+
+@keyframes subtleGridDrift {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(20px, 10px); }
+}
+
+.header {
+    position: relative;
+    z-index: 10;
+    padding: 14px 24px;
+    /* NOTE(Agent): CSS custom properties containing linear-gradient() don't work
+       with the background shorthand in all browsers. Use explicit background-color
+       as solid fallback + background-image for the gradient. */
+    background-color: #0D1117;
+    background-image: linear-gradient(90deg, #0D1117 0%, #131A24 50%, #0D1117 100%);
+    /* NOTE(Agent): overflow:hidden was here previously but it clips the SearchForm
+       autocomplete dropdown. The decorative topoTexture is now self-clipped via
+       clip-path on .topoClip instead. */
+}
+
+/* Teal accent line — top edge */
+.accentLine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 10%, var(--dark-accent) 50%, transparent 90%);
+    opacity: 0.7;
+}
+
+/* NOTE(Agent): .topoClip replaces the previous overflow:hidden on .header.
+   It clips the animated topoTexture texture (which uses inset:-20px) without
+   affecting sibling content like the SearchForm dropdown. */
+.topoClip {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Subtle topographic texture (matching hero) */
+.topoTexture {
+    position: absolute;
+    inset: -20px;
+    opacity: 0.06;
+    pointer-events: none;
+    animation: subtleGridDrift 40s linear infinite;
+    background-image:
+        radial-gradient(circle at 20% 50%, transparent 80px, rgba(10, 158, 142, 0.3) 81px, transparent 82px),
+        radial-gradient(circle at 80% 50%, transparent 60px, rgba(10, 158, 142, 0.2) 61px, transparent 62px),
+        repeating-linear-gradient(0deg,
+            rgba(10, 158, 142, 0.05) 0px,
+            rgba(10, 158, 142, 0.05) 1px,
+            transparent 1px,
+            transparent 40px),
+        repeating-linear-gradient(90deg,
+            rgba(10, 158, 142, 0.05) 0px,
+            rgba(10, 158, 142, 0.05) 1px,
+            transparent 1px,
+            transparent 40px);
+}
+
+/* Bottom border — subtle light line */
+.bottomBorder {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--dark-border), rgba(10, 158, 142, 0.15), var(--dark-border), transparent);
+}
+
+/* Inner layout */
+.inner {
+    position: relative;
+    z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+/* Brand mark — matches landing hero .brandName */
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    flex-shrink: 0;
+    /* NOTE(Agent): Button reset — .brand changed from <Link> to <button>
+       to allow resetting React state on click. */
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.brandName {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.35rem;
+    color: var(--dark-text, rgba(255, 255, 255, 0.95));
+    letter-spacing: -0.01em;
+    line-height: 1;
+}
+
+.brandAccent {
+    color: var(--dark-accent, #0FD4BD);
+}
+
+/* City badge — matches landing hero .badge */
+.badge {
+    display: inline-block;
+    font-family: var(--font-inter);
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    background-color: rgba(10, 158, 142, 0.12);
+    color: var(--dark-accent, #0FD4BD);
+    border: 1px solid rgba(10, 158, 142, 0.2);
+    white-space: nowrap;
+}
+
+/* Search area */
+.search {
+    flex: 1;
+    max-width: 560px;
+}
+
+/* NOTE(Agent): Selection highlight uses teal accent for visual consistency
+   with the brand palette, even though the input itself is now light/bright. */
+.header input::selection {
+    background: rgba(10, 158, 142, 0.25);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .header {
+        padding: 12px 16px;
+    }
+
+    .inner {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .search {
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .badge {
+        font-size: 8px;
+        padding: 3px 8px;
+    }
+}
+
+/* ── Reduced Motion ──────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .topoTexture {
+        animation: none;
+    }
+}

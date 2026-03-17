@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyCrime, classifyViolation, classifyCrash } from '../data-layer-classifier'
+import { classifyCrime, classifyViolation, classifyCrash, classify311 } from '../data-layer-classifier'
 
 describe('classifyCrime', () => {
     describe('red severity', () => {
@@ -594,6 +594,193 @@ describe('classifyCrash', () => {
                 primContributoryCause: 'IMPROPER LANE USAGE',
             })
             expect(result.communityNote).toContain('Sideswipe Same Direction')
+        })
+    })
+})
+
+describe('classify311', () => {
+    describe('red severity', () => {
+        it('flags rodent baiting as red', () => {
+            const result = classify311({
+                srType: 'Rodent Baiting/Rat Complaint',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('red')
+            expect(result.severityReason).toContain('Health/safety')
+            expect(result.communityNote).toContain('Health & Safety')
+        })
+
+        it('flags water main break as red', () => {
+            const result = classify311({
+                srType: 'Water Main Break',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('red')
+        })
+
+        it('flags gas leak as red', () => {
+            const result = classify311({
+                srType: 'Gas Leak Complaint',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('red')
+        })
+
+        it('flags flooding as red', () => {
+            const result = classify311({
+                srType: 'Flooding in basement',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('red')
+        })
+    })
+
+    describe('yellow severity', () => {
+        it('flags pothole in street as yellow', () => {
+            const result = classify311({
+                srType: 'Pothole in Street',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+            expect(result.severityReason).toContain('Quality-of-life')
+            expect(result.communityNote).toContain('Quality Concern')
+        })
+
+        it('flags noise complaint as yellow', () => {
+            const result = classify311({
+                srType: 'Noise Complaint',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('flags graffiti removal as yellow', () => {
+            const result = classify311({
+                srType: 'Graffiti Removal Request',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('flags e-scooter complaint as yellow', () => {
+            const result = classify311({
+                srType: 'E-Scooter Parking Complaint',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('flags abandoned vehicle as yellow', () => {
+            const result = classify311({
+                srType: 'Abandoned Vehicle Complaint',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('biases unknown open requests toward yellow', () => {
+            const result = classify311({
+                srType: 'Some Unknown Request Type',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+            expect(result.severityReason).toBe('Open request')
+        })
+    })
+
+    describe('green severity (resolved)', () => {
+        it('demotes red-type to green when status is Completed', () => {
+            const result = classify311({
+                srType: 'Rodent Baiting/Rat Complaint',
+                status: 'Completed',
+            })
+            expect(result.severity).toBe('green')
+            expect(result.severityReason).toBe('Resolved request')
+            expect(result.communityNote).toContain('has been addressed')
+        })
+
+        it('demotes yellow-type to green when Closed', () => {
+            const result = classify311({
+                srType: 'Pothole in Street',
+                status: 'Closed',
+            })
+            expect(result.severity).toBe('green')
+        })
+
+        it('treats Closed (Duplicate) as resolved', () => {
+            const result = classify311({
+                srType: 'Noise Complaint',
+                status: 'Closed (Duplicate)',
+            })
+            expect(result.severity).toBe('green')
+        })
+    })
+
+    describe('edge cases', () => {
+        it('handles empty sr_type', () => {
+            const result = classify311({
+                srType: '',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('handles empty status', () => {
+            const result = classify311({
+                srType: 'Pothole in Street',
+                status: '',
+            })
+            expect(result.severity).toBe('yellow')
+        })
+
+        it('is case-insensitive for sr_type matching', () => {
+            const result = classify311({
+                srType: 'RODENT BAITING/RAT COMPLAINT',
+                status: 'Open',
+            })
+            expect(result.severity).toBe('red')
+        })
+
+        it('is case-insensitive for status matching', () => {
+            const result = classify311({
+                srType: 'Pothole in Street',
+                status: 'COMPLETED',
+            })
+            expect(result.severity).toBe('green')
+        })
+    })
+
+    describe('community notes', () => {
+        it('includes sr_type in community note', () => {
+            const result = classify311({
+                srType: 'Street Light Out Complaint',
+                status: 'Open',
+            })
+            expect(result.communityNote).toContain('Street Light Out Complaint')
+        })
+
+        it('uses title case for sr_type in notes', () => {
+            const result = classify311({
+                srType: 'POTHOLE IN STREET',
+                status: 'Open',
+            })
+            expect(result.communityNote).toContain('Pothole In Street')
+        })
+
+        it('shows "is currently open" for active requests', () => {
+            const result = classify311({
+                srType: 'Noise Complaint',
+                status: 'Open',
+            })
+            expect(result.communityNote).toContain('is currently open')
+        })
+
+        it('shows "has been addressed" for resolved requests', () => {
+            const result = classify311({
+                srType: 'Tree Trim Request',
+                status: 'Completed',
+            })
+            expect(result.communityNote).toContain('has been addressed')
         })
     })
 })

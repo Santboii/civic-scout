@@ -13,9 +13,12 @@ interface SearchFormProps {
   onSearch: (suggestion: Suggestion) => void
   isLoading?: boolean
   initialValue?: string
+  /** Visual variant — 'dark' for the app header, 'light' (default) for landing/standalone */
+  variant?: 'light' | 'dark'
 }
 
-export default function SearchForm({ onSearch, isLoading, initialValue }: SearchFormProps) {
+export default function SearchForm({ onSearch, isLoading, initialValue, variant = 'light' }: SearchFormProps) {
+  const isDark = variant === 'dark'
   const [query, setQuery] = useState(initialValue ?? '')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -105,21 +108,27 @@ export default function SearchForm({ onSearch, isLoading, initialValue }: Search
       <div
         className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all"
         style={{
-          backgroundColor: 'var(--background-card)',
-          border: isFocused
-            ? '1px solid var(--accent-primary)'
-            : '1px solid var(--border-strong)',
-          boxShadow: isFocused ? 'var(--shadow-glow)' : 'var(--shadow-sm)',
+          backgroundColor: isDark ? '#FFFFFF' : 'var(--background-card)',
+          border: isDark
+            ? '1px solid rgba(0, 0, 0, 0.1)'
+            : `1px solid ${isFocused ? 'var(--accent-primary)' : 'var(--border-strong)'}`,
+          boxShadow: isFocused
+            ? isDark ? 'var(--shadow-glass)' : 'var(--shadow-glow)'
+            : isDark ? 'var(--shadow-md)' : 'var(--shadow-sm)',
         }}
       >
         <Search
           size={18}
-          style={{ color: isFocused ? 'var(--accent-primary)' : 'var(--text-muted)' }}
+          style={{
+            color: isFocused
+              ? 'var(--accent-primary)'
+              : 'var(--text-muted)',
+          }}
           className="shrink-0 transition-colors"
           aria-hidden="true"
         />
         <label htmlFor={inputId} className="visually-hidden">
-          Search any US address
+          Enter an address
         </label>
         <input
           id={inputId}
@@ -129,8 +138,8 @@ export default function SearchForm({ onSearch, isLoading, initialValue }: Search
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={activeOptionId}
-          className="flex-1 outline-none text-sm font-medium bg-transparent placeholder:text-[var(--text-muted)]"
-          placeholder="Search any US address…"
+          className="flex-1 outline-none text-sm font-medium bg-transparent"
+          placeholder="Search an address for permits, crime, zoning…"
           style={{
             color: 'var(--text-primary)',
           }}
@@ -166,8 +175,9 @@ export default function SearchForm({ onSearch, isLoading, initialValue }: Search
           id={listboxId}
           role="listbox"
           aria-label="Address suggestions"
-          className="absolute z-50 w-[calc(100%-2rem)] sm:w-full left-4 sm:left-0 mt-2 rounded-xl overflow-hidden text-sm"
+          className="absolute w-[calc(100%-2rem)] sm:w-full left-4 sm:left-0 mt-2 rounded-xl overflow-hidden text-sm"
           style={{
+            zIndex: 9999,
             backgroundColor: 'var(--background-card)',
             border: '1px solid var(--border-strong)',
             boxShadow: 'var(--shadow-glass)',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
+
 import { useSearchParams, useRouter } from 'next/navigation'
 import SearchForm from '@/components/SearchForm'
 import PermitList from '@/components/PermitList'
@@ -14,10 +15,13 @@ import DataLayerList from '@/components/DataLayerList'
 import DataLayerDetailModal from '@/components/DataLayerDetailModal'
 import SidebarTabs from '@/components/SidebarTabs'
 import type { SidebarTab } from '@/components/SidebarTabs'
+import headerStyles from '@/components/AppHeader.module.css'
 import { Building2, BarChart3 } from 'lucide-react'
+import type { CityInfo } from '@/components/CityGrid'
 import type { ClassifiedPermit } from '@/lib/permit-classifier'
-import type { PermitSeverity } from '@/lib/permit-classifier'
-import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash } from '@/lib/data-layers'
+import type { SeverityFilterValue } from '@/lib/permit-classifier'
+import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash, ServiceRequest } from '@/lib/data-layers'
+import type { ZoningFeatureCollection } from '@/lib/zoning'
 
 // Leaflet requires browser APIs — load client-side only
 const Map = dynamic(() => import('@/components/Map'), { ssr: false })
@@ -26,6 +30,187 @@ interface SearchState {
   address: string
   lat: number
   lon: number
+}
+
+// ── Unsupported Area Card ─────────────────────────────────────────────────
+// NOTE(Agent): Extracted as a file-local component to keep HomeContent smaller.
+// Computes nearby supported cities via haversine, shows clickable links, and
+// includes an inline city request form.
+
+interface UnsupportedAreaCardProps {
+  searchLat: number
+  searchLon: number
+  supportedCities: CityInfo[]
+  onSearch: (s: { address: string; lat: number; lon: number }) => void
+}
+
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3959 // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function UnsupportedAreaCard({ searchLat, searchLon, supportedCities, onSearch }: UnsupportedAreaCardProps) {
+  const [email, setEmail] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Compute nearest supported cities with distance
+  const nearbyCities = useMemo(() => {
+    if (supportedCities.length === 0) return []
+
+    // Deduplicate by city+state
+    const seen = new Set<string>()
+    const unique = supportedCities.filter((c) => {
+      const key = `${c.city}-${c.state}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    return unique
+      .filter((c) => c.center !== null)
+      .map((c) => ({
+        ...c,
+        distance: haversineDistance(searchLat, searchLon, c.center!.lat, c.center!.lon),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 3)
+  }, [supportedCities, searchLat, searchLon])
+
+  async function handleRequest() {
+    setSubmitting(true)
+    try {
+      await fetch('/api/city-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: searchLat, lon: searchLon, email: email || null }),
+      })
+      setSubmitted(true)
+    } catch {
+      // Best-effort
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      className="mt-3 p-4 rounded-lg text-center"
+      style={{
+        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+        border: '1px solid rgba(245, 158, 11, 0.2)',
+      }}
+    >
+      <p
+        className="text-[12px] font-semibold"
+        style={{ color: 'var(--status-yellow)', marginBottom: '6px' }}
+      >
+        No permit data available for this area yet
+      </p>
+
+      {/* Nearby city suggestions */}
+      {nearbyCities.length > 0 && (
+        <div style={{ marginBottom: '10px' }}>
+          <p
+            className="text-[10px]"
+            style={{ color: 'var(--text-muted)', marginBottom: '6px' }}
+          >
+            Try a nearby supported city:
+          </p>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {nearbyCities.map((c) => (
+              <button
+                key={`${c.city}-${c.state}`}
+                type="button"
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-full transition-all"
+                style={{
+                  backgroundColor: 'var(--accent-glow)',
+                  color: 'var(--accent-text)',
+                  border: '1px solid rgba(10, 158, 142, 0.15)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--accent-glow-strong)'
+                  e.currentTarget.style.borderColor = 'var(--accent-primary)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--accent-glow)'
+                  e.currentTarget.style.borderColor = 'rgba(10, 158, 142, 0.15)'
+                }}
+                onClick={() => {
+                  if (c.center) {
+                    onSearch({
+                      address: `${c.city}, ${c.state ?? ''}`.trim(),
+                      lat: c.center.lat,
+                      lon: c.center.lon,
+                    })
+                  }
+                }}
+              >
+                {c.city}{c.state ? `, ${c.state}` : ''}{' '}
+                <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                  ({Math.round(c.distance)} mi)
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Request this city */}
+      {!submitted ? (
+        <div>
+          <p
+            className="text-[10px] font-medium"
+            style={{ color: 'var(--text-secondary)', marginBottom: '6px' }}
+          >
+            Want CivicScout here?
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <input
+              type="email"
+              className="text-[11px] px-3 py-1.5 rounded-lg outline-none"
+              placeholder="Email (optional)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-label="Email for city request notification"
+              style={{
+                backgroundColor: 'var(--background-card)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+                width: '160px',
+              }}
+            />
+            <button
+              type="button"
+              className="text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                backgroundColor: 'var(--accent-primary)',
+                color: 'white',
+                border: 'none',
+              }}
+              onClick={handleRequest}
+              disabled={submitting}
+            >
+              {submitting ? '…' : 'Request'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p
+          className="text-[10px] font-medium"
+          style={{ color: 'var(--status-green)', marginBottom: 0 }}
+        >
+          ✓ We&rsquo;ll notify you when we expand here!
+        </p>
+      )}
+    </div>
+  )
 }
 
 function HomeContent() {
@@ -39,7 +224,11 @@ function HomeContent() {
   const [dataSource, setDataSource] = useState<string>('')
   const [cityName, setCityName] = useState<string>('')
   const [unsupportedArea, setUnsupportedArea] = useState(false)
-  const [minSeverity, setMinSeverity] = useState<PermitSeverity>('green')
+
+  // NOTE(Agent): Supported cities list — fetched once on mount from /api/cities.
+  // Powers the landing page CityGrid and unsupported-area nearby city suggestions.
+  const [supportedCities, setSupportedCities] = useState<CityInfo[]>([])
+  const [minSeverity, setMinSeverity] = useState<SeverityFilterValue>('all')
   const [selectedMapPermit, setSelectedMapPermit] = useState<ClassifiedPermit | null>(null)
   const [selectedPermitId, setSelectedPermitId] = useState<string | null>(null)
   // NOTE(Agent): Controls map-only visibility of permit markers. Sidebar
@@ -52,20 +241,27 @@ function HomeContent() {
     crimes: CrimeIncident[]
     violations: BuildingViolation[]
     crashes: TrafficCrash[]
-  }>({ crimes: [], violations: [], crashes: [] })
+    service_requests: ServiceRequest[]
+  }>({ crimes: [], violations: [], crashes: [], service_requests: [] })
   const [layerLoading, setLayerLoading] = useState<Record<DataLayerType, boolean>>({
-    crimes: false, violations: false, crashes: false,
+    crimes: false, violations: false, crashes: false, service_requests: false,
   })
   const [selectedLayerItem, setSelectedLayerItem] = useState<DataLayerItem | null>(null)
   const [selectedLayerItemId, setSelectedLayerItemId] = useState<string | null>(null)
-  const [minLayerSeverity, setMinLayerSeverity] = useState<PermitSeverity>('green')
+  const [minLayerSeverity, setMinLayerSeverity] = useState<SeverityFilterValue>('all')
   // NOTE(Agent): Per-layer source metadata from the API response. Used to pass
   // dynamic sourceUrl/sourceLabel to DataLayerDetailModal instead of hardcoded Chicago values.
   const [layerSourceMeta, setLayerSourceMeta] = useState<Record<string, { sourceUrl?: string | null; sourceLabel?: string | null }>>({})
 
-  // NOTE(Agent): Severity order used for filtering — 'green' shows all,
-  // 'yellow' shows yellow+red, 'red' shows only red.
-  const SEVERITY_ORDER: Record<PermitSeverity, number> = useMemo(() => ({
+  // ── Zoning State ──────────────────────────────────────────────────────
+  const [zoningVisible, setZoningVisible] = useState(false)
+  const [zoningData, setZoningData] = useState<ZoningFeatureCollection | null>(null)
+  const [zoningLoading, setZoningLoading] = useState(false)
+
+  // NOTE(Agent): Severity order used for filtering — 'all' shows everything,
+  // 'green' shows low+med+high, 'yellow' shows med+high, 'red' shows only high.
+  const SEVERITY_ORDER: Record<SeverityFilterValue, number> = useMemo(() => ({
+    all: -1,
     green: 0,
     yellow: 1,
     red: 2,
@@ -75,6 +271,15 @@ function HomeContent() {
     const threshold = SEVERITY_ORDER[minSeverity]
     return permits.filter((p) => SEVERITY_ORDER[p.severity] >= threshold)
   }, [permits, minSeverity, SEVERITY_ORDER])
+
+  // NOTE(Agent): Clear stale permit selection when the selected item is
+  // filtered out by severity change. Without this, toggling back to "All"
+  // resurrects a phantom selection — confusing UX.
+  useEffect(() => {
+    if (selectedPermitId && !filteredPermits.some((p) => p.id === selectedPermitId)) {
+      setSelectedPermitId(null)
+    }
+  }, [filteredPermits, selectedPermitId])
 
   // NOTE(Agent): useRef guards prevent infinite re-render loops. useSearchParams() returns
   // a new object reference on every render in Next.js 16, so using it as a useEffect
@@ -106,6 +311,14 @@ function HomeContent() {
         })
       }
     }
+
+    // Fetch supported cities for landing page + unsupported area state
+    fetch('/api/cities')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.cities) setSupportedCities(data.cities as CityInfo[])
+      })
+      .catch(() => { /* best-effort */ })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -211,6 +424,7 @@ function HomeContent() {
           if (data.crimes) next.crimes = data.crimes.data as CrimeIncident[]
           if (data.violations) next.violations = data.violations.data as BuildingViolation[]
           if (data.crashes) next.crashes = data.crashes.data as TrafficCrash[]
+          if (data.service_requests) next.service_requests = data.service_requests.data as ServiceRequest[]
           return next
         })
 
@@ -248,6 +462,25 @@ function HomeContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, token, fetchDataLayers])
 
+  // NOTE(Agent): Re-fetch zoning data when search location changes while the
+  // zoning overlay is visible. Similar to the data layer re-fetch above.
+  useEffect(() => {
+    if (search && token && zoningVisible) {
+      setZoningLoading(true)
+      setZoningData(null)
+      fetch(`/api/zoning?lat=${search.lat}&lon=${search.lon}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((data: ZoningFeatureCollection) => {
+          setZoningData(data)
+        })
+        .catch((err) => console.error('[zoning] Fetch failed:', err))
+        .finally(() => setZoningLoading(false))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, token])
+
 
   // Trigger layer fetch when layers are toggled on
   const handleLayerToggle = useCallback(
@@ -277,6 +510,7 @@ function HomeContent() {
     if (enabledLayers.has('crimes')) items.push(...layerData.crimes)
     if (enabledLayers.has('violations')) items.push(...layerData.violations)
     if (enabledLayers.has('crashes')) items.push(...layerData.crashes)
+    if (enabledLayers.has('service_requests')) items.push(...layerData.service_requests)
     return items
   }, [enabledLayers, layerData])
 
@@ -287,12 +521,21 @@ function HomeContent() {
     return dataLayerItems.filter((item) => SEVERITY_ORDER[item.severity] >= threshold)
   }, [dataLayerItems, minLayerSeverity, SEVERITY_ORDER])
 
+  // NOTE(Agent): Clear stale data layer selection when the selected item is
+  // filtered out by severity change — mirrors the permit selection guard above.
+  useEffect(() => {
+    if (selectedLayerItemId && !filteredDataLayerItems.some((i) => i.id === selectedLayerItemId)) {
+      setSelectedLayerItemId(null)
+    }
+  }, [filteredDataLayerItems, selectedLayerItemId])
+
   // Layer counts for the toggle panel
   const layerCounts: Partial<Record<DataLayerType, number>> = useMemo(() => {
     const counts: Partial<Record<DataLayerType, number>> = {}
     if (enabledLayers.has('crimes')) counts.crimes = layerData.crimes.length
     if (enabledLayers.has('violations')) counts.violations = layerData.violations.length
     if (enabledLayers.has('crashes')) counts.crashes = layerData.crashes.length
+    if (enabledLayers.has('service_requests')) counts.service_requests = layerData.service_requests.length
     return counts
   }, [enabledLayers, layerData])
 
@@ -302,11 +545,14 @@ function HomeContent() {
     // NOTE(Agent): Clear all stale state from the previous location so the UI
     // doesn't flash old markers, modals, or sidebar highlights while the new
     // data loads. Data layers are re-fetched by the useEffect below.
-    setLayerData({ crimes: [], violations: [], crashes: [] })
+    setLayerData({ crimes: [], violations: [], crashes: [], service_requests: [] })
     setSelectedPermitId(null)
     setSelectedMapPermit(null)
     setSelectedLayerItemId(null)
     setSelectedLayerItem(null)
+    // NOTE(Agent): Clear zoning data so the old polygons don't persist
+    // on the map while the new location loads.
+    setZoningData(null)
 
     // Update URL to persist search state
     const params = new URLSearchParams()
@@ -325,7 +571,7 @@ function HomeContent() {
   if (!search) {
     return (
       <main style={{ backgroundColor: 'var(--background-primary)' }}>
-        <LandingHero onSearch={handleSearch} isLoading={loading} />
+        <LandingHero onSearch={handleSearch} isLoading={loading} cities={supportedCities} />
         {showPayment && (
           <PaymentModal
             address=""
@@ -344,47 +590,47 @@ function HomeContent() {
           in the map view state, where LandingHero (which contains the visible h1) is unmounted.
           This is critical for SEO — without it the map-view render has zero h1 tags. */}
       <h1 className="sr-only">Building Permits Near {search?.address ?? 'Your Location'} — CivicScout</h1>
-      {/* Header — Dark editorial glass */}
-      <header
-        className="glass px-4 py-4 z-10 relative"
-        style={{
-          borderBottom: '1px solid var(--border-strong)',
-        }}
-      >
-        {/* Subtle accent line at the very top */}
-        <div
-          className="absolute top-0 left-0 right-0 h-[2px]"
-          style={{
-            background: 'linear-gradient(90deg, transparent, var(--accent-primary), transparent)',
-            opacity: 0.6,
-          }}
-        />
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span
-              className="text-2xl tracking-tight"
-              style={{
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-display), Georgia, serif',
-                fontWeight: 700,
-              }}
-            >
-              Civic<span style={{ color: 'var(--accent-primary)' }}>Scout</span>
+      {/* Header — Dark navy persistent brand bar (matches landing hero identity) */}
+      <header className={headerStyles.header}>
+        <div className={headerStyles.accentLine} aria-hidden="true" />
+        <div className={headerStyles.topoClip} aria-hidden="true">
+          <div className={headerStyles.topoTexture} />
+        </div>
+        <div className={headerStyles.bottomBorder} aria-hidden="true" />
+        <div className={headerStyles.inner}>
+          {/* NOTE(Agent): Using a button instead of <Link> because a client-side
+              navigation to "/" alone doesn't reset React state (search, permits,
+              layers, etc.), so the landing hero never re-appears. We must
+              explicitly clear state to trigger the `if (!search)` branch. */}
+          <button
+            type="button"
+            className={headerStyles.brand}
+            onClick={() => {
+              setSearch(null)
+              setPermits([])
+              setUnsupportedArea(false)
+              setEnabledLayers(new Set())
+              setLayerData({ crimes: [], violations: [], crashes: [], service_requests: [] })
+              setSelectedPermitId(null)
+              setSelectedMapPermit(null)
+              setSelectedLayerItemId(null)
+              setSelectedLayerItem(null)
+              setZoningData(null)
+              setZoningVisible(false)
+              setMinSeverity('all')
+              setMinLayerSeverity('all')
+              router.push('/', { scroll: false })
+            }}
+          >
+            <span className={headerStyles.brandName}>
+              Civic<span className={headerStyles.brandAccent}>Scout</span>
             </span>
-            <span
-              className="text-[9px] font-semibold uppercase tracking-[0.25em] px-2.5 py-1 rounded-full"
-              style={{
-                backgroundColor: 'var(--accent-glow)',
-                color: 'var(--accent-primary)',
-                border: '1px solid rgba(10, 158, 142, 0.15)',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              {cityName || 'Nationwide'}
+            <span className={headerStyles.badge}>
+              {cityName || 'Chicagoland'}
             </span>
-          </div>
-          <div className="flex-1 max-w-xl">
-            <SearchForm onSearch={handleSearch} isLoading={loading} initialValue={search.address} />
+          </button>
+          <div className={headerStyles.search}>
+            <SearchForm onSearch={handleSearch} isLoading={loading} initialValue={search.address} variant="dark" />
           </div>
         </div>
       </header>
@@ -393,17 +639,32 @@ function HomeContent() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Map */}
         <div className="flex-1 min-h-[50vh] lg:min-h-0 relative">
-          <Map
-            permits={permitsVisible ? filteredPermits : []}
-            center={mapCenter}
-            onPermitSelect={setSelectedMapPermit}
-            selectedPermitId={selectedPermitId}
-            onPermitDeselect={() => setSelectedPermitId(null)}
-            dataLayerItems={dataLayerItems}
-            onDataLayerSelect={setSelectedLayerItem}
-            selectedDataLayerItemId={selectedLayerItemId}
-            onDataLayerDeselect={() => setSelectedLayerItemId(null)}
-          />
+          {/* NOTE(Agent): Blur wrapper applies only to the Map, not overlay controls
+              (LayerToggle, loading bar). pointer-events:none prevents interaction
+              with blurred markers during load. */}
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              filter: loading ? 'blur(3px)' : 'blur(0px)',
+              opacity: loading ? 0.7 : 1,
+              transition: 'filter 0.4s ease, opacity 0.4s ease',
+              pointerEvents: loading ? 'none' : 'auto',
+            }}
+          >
+            <Map
+              permits={permitsVisible ? filteredPermits : []}
+              center={mapCenter}
+              onPermitSelect={setSelectedMapPermit}
+              selectedPermitId={selectedPermitId}
+              onPermitDeselect={() => setSelectedPermitId(null)}
+              dataLayerItems={filteredDataLayerItems}
+              onDataLayerSelect={setSelectedLayerItem}
+              selectedDataLayerItemId={selectedLayerItemId}
+              onDataLayerDeselect={() => setSelectedLayerItemId(null)}
+              zoningGeoJSON={zoningVisible ? zoningData : null}
+            />
+          </div>
           {/* Layer Toggle Panel — floating on the map */}
           {search && (
             <LayerToggle
@@ -413,8 +674,29 @@ function HomeContent() {
               loading={layerLoading}
               permitsVisible={permitsVisible}
               onPermitsToggle={() => setPermitsVisible((prev) => !prev)}
-              permitsCount={permits.length}
+              permitsCount={filteredPermits.length}
               permitsLoading={loading}
+              zoningVisible={zoningVisible}
+              onZoningToggle={() => {
+                setZoningVisible((prev) => {
+                  const next = !prev
+                  if (next && !zoningData && search && token) {
+                    // Fetch zoning data on first toggle-on
+                    setZoningLoading(true)
+                    fetch(`/api/zoning?lat=${search.lat}&lon=${search.lon}`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                      .then((r) => r.json())
+                      .then((data: ZoningFeatureCollection) => {
+                        setZoningData(data)
+                      })
+                      .catch((err) => console.error('[zoning] Fetch failed:', err))
+                      .finally(() => setZoningLoading(false))
+                  }
+                  return next
+                })
+              }}
+              zoningLoading={zoningLoading}
             />
           )}
           {loading && (
@@ -440,9 +722,11 @@ function HomeContent() {
         {/* Sidebar — Dark glass surface */}
         {(search || permits.length > 0) && (
           <aside
-            className="glass w-full lg:w-80 xl:w-96 border-t lg:border-t-0 lg:border-l overflow-y-auto p-6"
+            className="w-full lg:w-80 xl:w-96 border-t lg:border-t-0 lg:border-l overflow-y-auto p-6"
             style={{
               borderColor: 'var(--border-strong)',
+              backgroundColor: 'var(--background-primary)',
+              borderLeft: '2px solid rgba(10, 158, 142, 0.15)',
             }}
           >
             {search && (
@@ -452,23 +736,35 @@ function HomeContent() {
               >
                 <div className="flex items-baseline justify-between gap-2 mb-1">
                   <span
-                    className="text-[9px] font-semibold uppercase tracking-[0.2em]"
+                    className="text-[9px] font-semibold uppercase tracking-[0.2em] flex items-center gap-1.5"
                     style={{ color: 'var(--text-muted)' }}
                   >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0"
+                      style={{ backgroundColor: 'var(--accent-primary)' }}
+                      aria-hidden="true"
+                    />
                     Searching near
                   </span>
-                  {permits.length > 0 && (
+                  {filteredPermits.length > 0 && (
                     <span
                       className="text-[9px] font-semibold uppercase tracking-[0.15em]"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      {permits.length} results
+                      {filteredPermits.length} results
                     </span>
                   )}
                 </div>
                 <p
-                  className="text-[13px] font-medium truncate leading-snug"
-                  style={{ color: 'var(--text-primary)', marginBottom: 0 }}
+                  className="truncate leading-snug"
+                  style={{
+                    color: 'var(--text-primary)',
+                    marginBottom: 0,
+                    fontFamily: 'var(--font-inter), system-ui, sans-serif',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    letterSpacing: '-0.01em',
+                  }}
                   title={search.address}
                 >
                   {search.address}
@@ -486,26 +782,12 @@ function HomeContent() {
                   </p>
                 )}
                 {unsupportedArea && (
-                  <div
-                    className="mt-3 p-3 rounded-lg text-center"
-                    style={{
-                      backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                      border: '1px solid rgba(245, 158, 11, 0.2)',
-                    }}
-                  >
-                    <p
-                      className="text-[12px] font-semibold"
-                      style={{ color: 'var(--status-yellow)', marginBottom: '4px' }}
-                    >
-                      No permit data available for this area yet
-                    </p>
-                    <p
-                      className="text-[10px]"
-                      style={{ color: 'var(--text-muted)', marginBottom: 0 }}
-                    >
-                      CivicScout is expanding to new cities. Check back soon!
-                    </p>
-                  </div>
+                  <UnsupportedAreaCard
+                    searchLat={search.lat}
+                    searchLon={search.lon}
+                    supportedCities={supportedCities}
+                    onSearch={handleSearch}
+                  />
                 )}
               </div>
             )}

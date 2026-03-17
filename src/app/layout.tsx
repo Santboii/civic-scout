@@ -1,18 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Sora } from "next/font/google";
+import { Inter, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 
-const cormorant = Cormorant_Garamond({
-  variable: "--font-display",
+// NOTE(Agent): Inter is used for both display and body text. Weight variation
+// (700-800 for headings, 400-500 for body) provides hierarchy without mixing
+// typefaces. Inter is the industry-standard for data-dense dashboard UIs
+// (Vercel, Linear, Notion) due to its screen-optimized design and generous x-height.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["600", "700"],
   display: "swap",
 });
 
-const sora = Sora({
-  variable: "--font-body",
+// NOTE(Agent): DM Serif Display is used exclusively for the landing page hero
+// headline. Its high-contrast serif letterforms create visual distinction from
+// Inter's geometric neutrality — establishing brand identity at first glance.
+const dmSerif = DM_Serif_Display({
+  variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "400",
   display: "swap",
 });
 
@@ -130,7 +136,7 @@ export default function RootLayout({
       {/* NOTE(Agent): suppressHydrationWarning prevents false mismatches from browser
           extensions injecting attributes (e.g., ColorZilla on <body>). */}
       <body
-        className={`${cormorant.variable} ${sora.variable} antialiased`}
+        className={`${inter.variable} ${dmSerif.variable} antialiased`}
         suppressHydrationWarning
       >
         <script

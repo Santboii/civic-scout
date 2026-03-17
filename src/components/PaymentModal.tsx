@@ -139,7 +139,7 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
         <h2
           id={headingId}
           className="text-xl mb-1 tracking-tight"
-          style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display), Georgia, serif', fontWeight: 700 }}
+          style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-inter), system-ui, sans-serif', fontWeight: 700 }}
         >
           Unlock Development Report
         </h2>
@@ -172,7 +172,7 @@ export default function PaymentModal({ address, lat, lon, onClose }: PaymentModa
             >
               <div className="text-left">
                 <p className="font-bold text-sm">Unlimited Plan</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">Search any US address</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">Unlimited searches</p>
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-xl font-black">$5</span>

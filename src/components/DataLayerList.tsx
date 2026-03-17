@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useMemo, memo } from 'react'
-import { Shield, AlertTriangle, Car } from 'lucide-react'
-import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash } from '@/lib/data-layers'
+import { Shield, AlertTriangle, Car, Phone, Search } from 'lucide-react'
+import type { DataLayerItem, DataLayerType, CrimeIncident, BuildingViolation, TrafficCrash, ServiceRequest } from '@/lib/data-layers'
 import { LAYER_SEVERITY_LABELS } from '@/lib/data-layer-classifier'
 import type { PermitSeverity } from '@/lib/permit-classifier'
 
@@ -30,6 +30,7 @@ const TABS: TabDef[] = [
     { type: 'crimes', label: 'Crime', icon: Shield, color: 'var(--layer-crime, #D94F3B)', bg: 'rgba(217, 79, 59, 0.06)' },
     { type: 'violations', label: 'Violations', icon: AlertTriangle, color: 'var(--layer-violation, #D97706)', bg: 'rgba(217, 119, 6, 0.06)' },
     { type: 'crashes', label: 'Crashes', icon: Car, color: 'var(--layer-crash, #4A90B0)', bg: 'rgba(74, 144, 176, 0.06)' },
+    { type: 'service_requests', label: '311', icon: Phone, color: 'var(--layer-311, #8B5CF6)', bg: 'rgba(139, 92, 246, 0.06)' },
 ]
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -43,14 +44,57 @@ function DataLayerList({ items, enabledLayers, onItemClick, onViewDetails, selec
     )
 
     const [activeTab, setActiveTab] = useState<DataLayerType | null>(null)
+    const [searchQuery, setSearchQuery] = useState('')
 
     // Auto-select first available tab if current selection is invalid
     const effectiveTab = activeTab && enabledLayers.has(activeTab) ? activeTab : (availableTabs[0]?.type ?? null)
 
+    // NOTE(Agent): Clear search when switching tabs so stale filters don't
+    // confuse users. Done in the click handler instead of useEffect to avoid
+    // the react-hooks/set-state-in-effect lint rule violation.
+    const handleTabClick = (type: DataLayerType) => {
+        setActiveTab(type)
+        setSearchQuery('')
+    }
+
+    // NOTE(Agent): Sort by severity (red → yellow → green) to surface high-severity
+    // items first, matching PermitList's sorting behavior. Without this, items appear
+    // in API order (chronological) and severe items get buried among minor ones.
     const filteredItems = useMemo(
-        () => effectiveTab ? items.filter((i) => i.layerType === effectiveTab) : [],
+        () => {
+            if (!effectiveTab) return []
+            const order: Record<PermitSeverity, number> = { red: 0, yellow: 1, green: 2 }
+            return items
+                .filter((i) => i.layerType === effectiveTab)
+                .sort((a, b) => order[a.severity] - order[b.severity])
+        },
         [items, effectiveTab]
     )
+
+    // NOTE(Agent): Client-side search filters activity items by type-specific
+    // text fields. Each layer type searches its most relevant user-visible fields.
+    const searchFiltered = useMemo(() => {
+        if (!searchQuery.trim()) return filteredItems
+        const q = searchQuery.toLowerCase()
+        return filteredItems.filter((item) => {
+            switch (item.layerType) {
+                case 'crimes':
+                    return item.primaryType.toLowerCase().includes(q) ||
+                        item.block.toLowerCase().includes(q) ||
+                        item.description.toLowerCase().includes(q)
+                case 'violations':
+                    return item.violationCode.toLowerCase().includes(q) ||
+                        item.address.toLowerCase().includes(q) ||
+                        item.violationDescription.toLowerCase().includes(q)
+                case 'crashes':
+                    return item.crashType.toLowerCase().includes(q) ||
+                        item.primContributoryCause.toLowerCase().includes(q)
+                case 'service_requests':
+                    return item.srType.toLowerCase().includes(q) ||
+                        item.address.toLowerCase().includes(q)
+            }
+        })
+    }, [filteredItems, searchQuery])
 
     if (availableTabs.length === 0) return null
 
@@ -78,7 +122,7 @@ function DataLayerList({ items, enabledLayers, onItemClick, onViewDetails, selec
                                 color: isActive ? tab.color : 'var(--text-muted)',
                                 border: `1px solid ${isActive ? tab.color + '33' : 'transparent'}`,
                             }}
-                            onClick={() => setActiveTab(tab.type)}
+                            onClick={() => handleTabClick(tab.type)}
                         >
                             <Icon size={12} aria-hidden="true" />
                             {tab.label}
@@ -97,6 +141,32 @@ function DataLayerList({ items, enabledLayers, onItemClick, onViewDetails, selec
             </div>
 
             {/* Tab Panel */}
+            {/* Search Input */}
+            {effectiveTab && filteredItems.length > 0 && (
+                <div className="relative mb-3">
+                    <Search
+                        size={14}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        style={{ color: 'var(--text-muted)' }}
+                        aria-hidden="true"
+                    />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search activity by address or type…"
+                        aria-label="Filter activity items"
+                        className="w-full text-xs py-2 pl-8 pr-3 rounded-lg outline-none transition-colors"
+                        style={{
+                            backgroundColor: 'var(--background-card)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-strong)',
+                        }}
+
+                    />
+                </div>
+            )}
+
             {effectiveTab && (
                 <div
                     id={`tabpanel-${effectiveTab}`}
@@ -107,10 +177,16 @@ function DataLayerList({ items, enabledLayers, onItemClick, onViewDetails, selec
                         <p className="text-center text-xs py-6" style={{ color: 'var(--text-muted)' }}>
                             No data found for this layer.
                         </p>
+                    ) : searchFiltered.length === 0 ? (
+                        <p className="text-center text-xs py-6" style={{ color: 'var(--text-muted)' }}>
+                            No results matching &ldquo;{searchQuery}&rdquo;
+                        </p>
                     ) : (
                         <ul className="space-y-2">
-                            {filteredItems.map((item, index) => (
-                                <li key={item.id} className="animate-fade-slide-up" style={{ animationDelay: `${index * 30}ms` }}>
+                            {/* NOTE(Agent): Some API records arrive with an empty-string id,
+                                causing React duplicate-key warnings. Fall back to index. */}
+                            {searchFiltered.map((item, index) => (
+                                <li key={item.id || `${item.layerType}-${index}`} className="animate-fade-slide-up" style={{ animationDelay: `${index * 30}ms` }}>
                                     {item.layerType === 'crimes' && (
                                         <CrimeCard item={item} isSelected={item.id === selectedItemId} onClick={() => onItemClick?.(item)} onViewDetails={() => onViewDetails?.(item)} />
                                     )}
@@ -119,6 +195,9 @@ function DataLayerList({ items, enabledLayers, onItemClick, onViewDetails, selec
                                     )}
                                     {item.layerType === 'crashes' && (
                                         <CrashCard item={item} isSelected={item.id === selectedItemId} onClick={() => onItemClick?.(item)} onViewDetails={() => onViewDetails?.(item)} />
+                                    )}
+                                    {item.layerType === 'service_requests' && (
+                                        <ServiceRequestCard item={item} isSelected={item.id === selectedItemId} onClick={() => onItemClick?.(item)} onViewDetails={() => onViewDetails?.(item)} />
                                     )}
                                 </li>
                             ))}
@@ -303,6 +382,41 @@ function CrashCard({ item, isSelected, onClick, onViewDetails }: CardProps & { i
                                 {item.injuriesFatal} FATAL
                             </span>
                         )}
+                    </div>
+                </div>
+            </div>
+        </CardWrapper>
+    )
+}
+
+function ServiceRequestCard({ item, isSelected, onClick, onViewDetails }: CardProps & { item: ServiceRequest }) {
+    const formattedDate = item.createdDate ? new Date(item.createdDate).toLocaleDateString() : ''
+    const isOpen = !item.status.toLowerCase().includes('completed') && !item.status.toLowerCase().includes('closed')
+    const severityLabel = LAYER_SEVERITY_LABELS[item.severity]?.service_requests ?? 'Service Request'
+    return (
+        <CardWrapper color="var(--layer-311, #8B5CF6)" severity={item.severity} severityLabel={severityLabel} communityNote={item.communityNote} isSelected={isSelected} onClick={onClick} onViewDetails={onViewDetails} ariaLabel={`${severityLabel}: ${item.srType} at ${item.address}`}>
+            <div className="flex items-start gap-2">
+                <div className="p-1.5 rounded-lg shrink-0" style={{ backgroundColor: 'rgba(139, 92, 246, 0.06)' }}>
+                    <Phone size={14} style={{ color: 'var(--layer-311, #8B5CF6)' }} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                        {item.srType || '311 Request'}
+                    </p>
+                    <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                        {item.address}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{formattedDate}</span>
+                        <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                            style={{
+                                color: isOpen ? '#8B5CF6' : '#1B9B6C',
+                                backgroundColor: isOpen ? 'rgba(139, 92, 246, 0.08)' : 'rgba(27, 155, 108, 0.08)',
+                            }}
+                        >
+                            {isOpen ? 'OPEN' : 'CLOSED'}
+                        </span>
                     </div>
                 </div>
             </div>

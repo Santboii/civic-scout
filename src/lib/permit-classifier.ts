@@ -1,4 +1,8 @@
 export type PermitSeverity = 'red' | 'yellow' | 'green'
+// NOTE(Agent): SeverityFilterValue extends PermitSeverity with 'all' for the
+// filter UI. 'all' is never assigned to actual items — it's a filter-only value
+// meaning "show everything regardless of severity".
+export type SeverityFilterValue = PermitSeverity | 'all'
 
 export interface ClassifiedPermit {
   id: string

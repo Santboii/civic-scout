@@ -21,7 +21,7 @@ export default function Error({ error, reset }: ErrorProps) {
             className="flex flex-col items-center justify-center min-h-screen gap-6 p-8 text-center"
             style={{ backgroundColor: 'var(--background-primary)' }}
         >
-            <div style={{ fontFamily: 'var(--font-display), Georgia, serif' }}>
+            <div style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
                 <p
                     className="text-[11px] font-semibold uppercase tracking-[0.25em] mb-3"
                     style={{ color: 'var(--accent-primary)' }}
