@@ -228,6 +228,18 @@ button:disabled {
   opacity: 0.5;
 }
 
+/* NOTE(Agent): Suppress the default dark focus outline on click/tap for all
+   interactive elements. We keep :focus-visible so keyboard users still get
+   a visible ring (WCAG 2.4.7). The dark box on :focus was jarring on mouse. */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 /* === Glass Utilities — Light frosted variant === */
 
 /* NOTE(Agent): Apply .glass only to surfaces that benefit from blur:

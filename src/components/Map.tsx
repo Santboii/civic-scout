@@ -280,23 +280,37 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
 
     const navBar = `
       <div data-cluster-nav style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid rgba(0,0,0,0.06);font-family:system-ui">
-        <button onclick="event.stopPropagation();window.__clusterNav&&window.__clusterNav('${markerId}','prev')" style="width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,0.06);color:${TEXT_PRIMARY};font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.12)'" onmouseout="this.style.background='rgba(0,0,0,0.06)'" aria-label="Previous item">‹</button>
+        <button data-cluster-prev="${markerId}" style="width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,0.06);color:${TEXT_PRIMARY};font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s" aria-label="Previous item">‹</button>
         <span data-cluster-counter="${markerId}" style="font-size:11px;font-weight:600;color:${TEXT_SECONDARY}">1 of ${items.length}</span>
-        <button onclick="event.stopPropagation();window.__clusterNav&&window.__clusterNav('${markerId}','next')" style="width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,0.06);color:${TEXT_PRIMARY};font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseover="this.style.background='rgba(0,0,0,0.12)'" onmouseout="this.style.background='rgba(0,0,0,0.06)'" aria-label="Next item">›</button>
+        <button data-cluster-next="${markerId}" style="width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,0.06);color:${TEXT_PRIMARY};font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s" aria-label="Next item">›</button>
       </div>
     `
 
     return `<div data-cluster-root="${markerId}">${navBar}${pages}</div>`
   }, [buildPermitPopupHtml, buildDataLayerPopupHtml])
 
-  // NOTE(Agent): Global pagination handler registered on the window object.
-  // Inline onclick handlers in the popup HTML call this function directly.
-  // This avoids Leaflet event system issues that prevented addEventListener
-  // from working reliably on popup buttons. The function finds the relevant
-  // DOM elements using data attributes and performs page switching in-place.
+  // NOTE(Agent): Event delegation for cluster pagination buttons.
+  // Uses document-level capture phase listener because Leaflet renders popups
+  // inside its own internal pane structure and stops event propagation before
+  // it reaches the map container div. Document-level capture fires before
+  // Leaflet's own handlers, ensuring we can intercept button clicks.
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__clusterNav = (markerId: string, direction: 'prev' | 'next') => {
+    const handleClusterNav = (e: Event) => {
+      const target = e.target as HTMLElement
+      if (!target) return
+
+      const prevBtn = target.closest<HTMLElement>('[data-cluster-prev]')
+      const nextBtn = target.closest<HTMLElement>('[data-cluster-next]')
+      const btn = prevBtn || nextBtn
+      if (!btn) return
+
+      // Stop the click from propagating to the map (which would close the popup)
+      e.stopPropagation()
+      e.preventDefault()
+
+      const markerId = btn.getAttribute(prevBtn ? 'data-cluster-prev' : 'data-cluster-next') ?? ''
+      const direction: 'prev' | 'next' = prevBtn ? 'prev' : 'next'
+
       const root = document.querySelector(`[data-cluster-root="${markerId}"]`)
       if (!root) return
 
@@ -318,18 +332,26 @@ function Map({ permits, center, onPermitSelect, selectedPermitId, onPermitDesele
       if (counter) counter.textContent = `${currentPage + 1} of ${totalPages}`
       root.setAttribute('data-current-page', String(currentPage))
 
-      // NOTE(Agent): Find the open popup and update its position to account
-      // for content height changes across pages.
+      // NOTE(Agent): DO NOT call popup.update() here — Leaflet's update()
+      // calls _updateContent() which re-renders from the original HTML string,
+      // wiping out our imperative DOM changes. Instead, call _adjustPan()
+      // directly to reposition the popup for content height changes.
       mapRef.current?.eachLayer((layer) => {
         if (layer instanceof L.Marker && layer.getPopup()?.isOpen()) {
-          layer.getPopup()?.update()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const popup = layer.getPopup() as any
+          if (popup._map && popup._adjustPan) {
+            popup._adjustPan()
+          }
         }
       })
     }
 
+    // Capture phase on document — fires before ANY other handler
+    document.addEventListener('click', handleClusterNav, true)
+
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (window as any).__clusterNav
+      document.removeEventListener('click', handleClusterNav, true)
     }
   }, [])
 
